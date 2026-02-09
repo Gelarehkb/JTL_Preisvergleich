@@ -1,48 +1,51 @@
 import { useState, useCallback } from 'react';
 import { FileUploadZone } from '@/components/FileUploadZone';
-import { ColumnMapper } from '@/components/ColumnMapper';
+import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { parseNewPrices, parseJTL, getColumnHeaders } from '@/lib/parseFiles';
+import { parseJTL } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
-import type { IdentifierType, NewPriceRow, JTLRow } from '@/lib/types';
+import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 
+function parseNumber(val: string): number {
+  if (!val.trim()) return 0;
+  const str = val.replace(/\s/g, '').replace(',', '.');
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
+function createInitialRows(): TableRow[] {
+  let id = 0;
+  return Array.from({ length: 5 }, () => ({
+    id: `init-${++id}`,
+    identifier: '',
+    newEK: '',
+    newVK: '',
+  }));
+}
+
 const Index = () => {
   const [identifierType, setIdentifierType] = useState<IdentifierType>('HAN');
-  const [newFile, setNewFile] = useState<File | null>(null);
+  const [tableRows, setTableRows] = useState<TableRow[]>(createInitialRows);
   const [jtlFile, setJtlFile] = useState<File | null>(null);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [skuCol, setSkuCol] = useState('');
-  const [ekCol, setEkCol] = useState('');
-  const [vkCol, setVkCol] = useState('');
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleNewFile = useCallback(async (file: File) => {
-    setNewFile(file);
-    setResult(null);
-    try {
-      const cols = await getColumnHeaders(file);
-      setHeaders(cols);
-      // Auto-detect columns
-      setSkuCol(cols.find(c => /sku|han|ean|barcode|identifier/i.test(c)) ?? cols[0] ?? '');
-      setEkCol(cols.find(c => /ek|einkauf|purchase/i.test(c)) ?? cols[1] ?? '');
-      setVkCol(cols.find(c => /vk|verkauf|selling|retail/i.test(c)) ?? cols[2] ?? '');
-    } catch {
-      toast.error('Fehler beim Lesen der Datei');
-    }
-  }, []);
+  const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
   const handleCompare = useCallback(async () => {
-    if (!newFile || !jtlFile || !skuCol || !ekCol || !vkCol) return;
+    if (filledRows.length === 0 || !jtlFile) return;
     setLoading(true);
     try {
-      const [newPrices, { rows: jtlRows }] = await Promise.all([
-        parseNewPrices(newFile, skuCol, ekCol, vkCol),
-        parseJTL(jtlFile),
-      ]);
+      const newPrices: NewPriceRow[] = filledRows.map(r => ({
+        sku: r.identifier.trim(),
+        newEK: parseNumber(r.newEK),
+        newVK: parseNumber(r.newVK),
+      }));
+
+      const { rows: jtlRows } = await parseJTL(jtlFile);
       const res = compareItems(newPrices, jtlRows, identifierType);
       setResult(res);
       toast.success(`${res.priceChanges.length} Preisänderungen gefunden`);
@@ -51,9 +54,9 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
-  }, [newFile, jtlFile, skuCol, ekCol, vkCol, identifierType]);
+  }, [filledRows, jtlFile, identifierType]);
 
-  const canCompare = newFile && jtlFile && skuCol && ekCol && vkCol;
+  const canCompare = filledRows.length > 0 && jtlFile;
 
   return (
     <div className="min-h-screen bg-background">
@@ -85,44 +88,34 @@ const Index = () => {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {type}
+                {type === 'EAN' ? 'EAN Barcode' : 'HAN'}
               </button>
             ))}
           </div>
         </div>
 
-        {/* File Uploads */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-3">
-            <FileUploadZone
-              label="Neue Preisliste"
-              description="Excel oder CSV mit SKU, EK, VK"
-              accept=".csv,.xlsx,.xls"
-              file={newFile}
-              onFile={handleNewFile}
-              onClear={() => { setNewFile(null); setHeaders([]); setResult(null); }}
-            />
-            {headers.length > 0 && (
-              <ColumnMapper
-                headers={headers}
-                skuColumn={skuCol}
-                ekColumn={ekCol}
-                vkColumn={vkCol}
-                onSkuChange={setSkuCol}
-                onEkChange={setEkCol}
-                onVkChange={setVkCol}
-              />
-            )}
-          </div>
+        {/* New Price List - Editable Table */}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
+          <EditableTable
+            identifierType={identifierType}
+            rows={tableRows}
+            onChange={(rows) => { setTableRows(rows); setResult(null); }}
+          />
+        </section>
+
+        {/* JTL Export Upload */}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">JTL Export</h2>
           <FileUploadZone
-            label="JTL Export"
+            label="JTL Export hochladen"
             description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
             accept=".csv"
             file={jtlFile}
             onFile={(f) => { setJtlFile(f); setResult(null); }}
             onClear={() => { setJtlFile(null); setResult(null); }}
           />
-        </div>
+        </section>
 
         {/* Compare Button */}
         <div className="flex justify-center">
