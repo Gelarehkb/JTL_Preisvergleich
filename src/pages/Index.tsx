@@ -105,6 +105,29 @@ const Index = () => {
           </Button>
         </div>
 
+        {/* JTL Export Upload */}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">JTL Export</h2>
+          <FileUploadZone
+            label="JTL Export hochladen"
+            description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
+            accept=".csv"
+            file={jtlFile}
+            onFile={(f) => { setJtlFile(f); setResult(null); }}
+            onClear={() => { setJtlFile(null); setResult(null); }}
+          />
+        </section>
+
+        {/* New Price List - Editable Table */}
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
+          <EditableTable
+            identifierType={identifierType}
+            rows={tableRows}
+            onChange={(rows) => { setTableRows(rows); setResult(null); }}
+          />
+        </section>
+
         {/* Results */}
         {result && <ResultsPanel result={result} />}
       </main>
