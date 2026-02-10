@@ -9,6 +9,10 @@ export interface ComparisonResult {
   unmatchedCount: number;
   /** Rows excluded because both EK and VK were null in the new price list */
   invalidRowCount: number;
+  /** Count of matched rows where JTL EK was null */
+  missingJtlEkCount: number;
+  /** Count of matched rows where JTL VK was null */
+  missingJtlVkCount: number;
   warnings: ComparisonWarning[];
 }
 
@@ -32,11 +36,15 @@ function normalizeKey(value: string, type: IdentifierType): string {
   return trimmed;
 }
 
-function pricesChanged(oldVal: number | null, newVal: number | null): boolean | null {
-  // If new value is null, we can't compare — skip this dimension
-  if (newVal === null) return null;
-  // If old value is null but new is provided, that's a change
-  if (oldVal === null) return true;
+/**
+ * Nullable XOR comparison:
+ * - both null → false (no change)
+ * - exactly one null → true (change)
+ * - both present → |a-b| > tolerance
+ */
+function pricesChanged(oldVal: number | null, newVal: number | null): boolean {
+  if (oldVal === null && newVal === null) return false;
+  if (oldVal === null || newVal === null) return true;
   return Math.abs(newVal - oldVal) >= PRICE_TOLERANCE;
 }
 
@@ -68,11 +76,14 @@ export function compareItems(
     if (count === 2) {
       warnings.push({
         type: 'duplicate_key',
-        message: `Duplicate ${identifierType} "${rawKey}" in JTL export (${count}+ rows). Only the last occurrence is used.`,
+        message: `Duplikat ${identifierType} "${rawKey}" im JTL Export (${count}+ Zeilen). Nur die erste Zeile wird verwendet.`,
       });
     }
 
-    jtlMap.set(key, row);
+    // Keep first occurrence only
+    if (!jtlMap.has(key)) {
+      jtlMap.set(key, row);
+    }
   }
 
   const priceChanges: PriceChangeRow[] = [];
@@ -80,6 +91,8 @@ export function compareItems(
   let skippedCount = 0;
   let unmatchedCount = 0;
   let invalidRowCount = 0;
+  let missingJtlEkCount = 0;
+  let missingJtlVkCount = 0;
 
   for (const np of newPrices) {
     // Skip rows where both EK and VK are null (empty input)
@@ -98,23 +111,16 @@ export function compareItems(
 
     matchedCount++;
 
-    const ekResult = pricesChanged(jtl.ekNettoLieferant, np.newEK);
-    const vkResult = pricesChanged(jtl.vkBrutto, np.newVK);
+    // Track missing JTL prices
+    if (jtl.ekNettoLieferant === null) missingJtlEkCount++;
+    if (jtl.vkBrutto === null) missingJtlVkCount++;
 
-    // If all comparable dimensions are unchanged, skip
-    // null result means "not comparable" — we only skip if ALL results are false or null,
-    // and at least one was explicitly false (i.e., compared and equal)
-    const hasChange = ekResult === true || vkResult === true;
-    const hasComparison = ekResult !== null || vkResult !== null;
+    // XOR-based comparison: both null=false, one null=true, both present=tolerance check
+    const ekChanged = pricesChanged(jtl.ekNettoLieferant, np.newEK);
+    const vkChanged = pricesChanged(jtl.vkBrutto, np.newVK);
 
-    if (!hasChange && hasComparison) {
+    if (!ekChanged && !vkChanged) {
       skippedCount++;
-      continue;
-    }
-
-    // If neither dimension was comparable (both null), skip as invalid
-    if (!hasComparison) {
-      invalidRowCount++;
       continue;
     }
 
@@ -150,5 +156,5 @@ export function compareItems(
     }
   }
 
-  return { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, warnings };
+  return { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, missingJtlEkCount, missingJtlVkCount, warnings };
 }
