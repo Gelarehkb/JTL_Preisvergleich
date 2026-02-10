@@ -97,43 +97,44 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
       {priceChanges.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden">
           <div className="border-b bg-muted/50 px-4 py-2.5">
-            <p className="text-sm font-semibold">Vorschau Preisänderungen</p>
+            <p className="text-sm font-semibold">Preisänderungen</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Int. Schlüssel</th>
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Identifier</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Alt EK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Neu EK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Alt VK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Neu VK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">VK Diff.</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">{priceChanges[0]?.identifierType === 'EAN' ? 'EAN' : 'HAN'}</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">OLD EK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">NEW EK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">ΔEK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">OLD VK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">NEW VK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">ΔVK</th>
                 </tr>
               </thead>
               <tbody>
-                {priceChanges.slice(0, 20).map((r, i) => (
-                  <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
-                    <td className="px-3 py-2 font-mono">{r.internerSchluessel}</td>
-                    <td className="px-3 py-2 font-mono">{r.identifierValue}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(r.oldEK)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(r.newEK)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(r.oldVK)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(r.newVK)}</td>
-                    <td className={`px-3 py-2 text-right font-mono font-semibold ${r.vkDifference !== null && r.vkDifference > 0 ? 'text-destructive' : r.vkDifference !== null && r.vkDifference < 0 ? 'text-success' : ''}`}>
-                      {r.vkDifference !== null ? `${r.vkDifference > 0 ? '+' : ''}${r.vkDifference.toFixed(2)}` : '–'}
-                    </td>
-                  </tr>
-                ))}
+                {priceChanges.map((r, i) => {
+                  const ekDiff = r.oldEK !== null && r.newEK !== null ? r.newEK - r.oldEK : null;
+                  const vkDiff = r.oldVK !== null && r.newVK !== null ? r.newVK - r.oldVK : null;
+                  return (
+                    <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                      <td className="px-3 py-2 font-mono">{r.identifierValue}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.oldEK)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.newEK)}</td>
+                      <td className={`px-3 py-2 text-right font-mono font-semibold ${ekDiff !== null && ekDiff > 0 ? 'text-destructive' : ekDiff !== null && ekDiff < 0 ? 'text-success' : ''}`}>
+                        {ekDiff !== null ? `${ekDiff > 0 ? '+' : ''}${ekDiff.toFixed(2)}` : 'N/A'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.oldVK)}</td>
+                      <td className="px-3 py-2 text-right font-mono">{fmt(r.newVK)}</td>
+                      <td className={`px-3 py-2 text-right font-mono font-semibold ${vkDiff !== null && vkDiff > 0 ? 'text-destructive' : vkDiff !== null && vkDiff < 0 ? 'text-success' : ''}`}>
+                        {vkDiff !== null ? `${vkDiff > 0 ? '+' : ''}${vkDiff.toFixed(2)}` : 'N/A'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          {priceChanges.length > 20 && (
-            <div className="border-t bg-muted/30 px-4 py-2 text-center text-xs text-muted-foreground">
-              Zeige 20 von {priceChanges.length} Zeilen
-            </div>
-          )}
         </div>
       )}
     </div>
