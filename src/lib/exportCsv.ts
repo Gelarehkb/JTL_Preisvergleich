@@ -1,6 +1,7 @@
 import type { PriceChangeRow, StockNGRow, StockKGRow } from './types';
 
-function formatNum(n: number): string {
+function formatNum(n: number | null): string {
+  if (n === null) return '';
   return n.toFixed(2).replace('.', ',');
 }
 

@@ -2,8 +2,10 @@ export type IdentifierType = 'HAN' | 'EAN';
 
 export interface NewPriceRow {
   sku: string;
-  newEK: number;
-  newVK: number;
+  /** null = cell was empty, exclude from comparison */
+  newEK: number | null;
+  /** null = cell was empty, exclude from comparison */
+  newVK: number | null;
 }
 
 export interface JTLRow {
@@ -12,8 +14,10 @@ export interface JTLRow {
   eanBarcode: string;
   han: string;
   artikelname: string;
-  ekNettoLieferant: number;
-  vkBrutto: number;
+  /** null when column missing or cell empty */
+  ekNettoLieferant: number | null;
+  /** null when column missing or cell empty */
+  vkBrutto: number | null;
   warengruppe: string;
   hersteller: string;
   imZulauf: string;
@@ -26,11 +30,11 @@ export interface PriceChangeRow {
   internerSchluessel: string;
   identifierType: IdentifierType;
   identifierValue: string;
-  oldEK: number;
-  newEK: number;
-  oldVK: number;
-  newVK: number;
-  vkDifference: number;
+  oldEK: number | null;
+  newEK: number | null;
+  oldVK: number | null;
+  newVK: number | null;
+  vkDifference: number | null;
 }
 
 export interface StockNGRow extends PriceChangeRow {
@@ -39,4 +43,10 @@ export interface StockNGRow extends PriceChangeRow {
 
 export interface StockKGRow extends PriceChangeRow {
   bestandKG: number;
+}
+
+/** Warnings surfaced to the user after comparison */
+export interface ComparisonWarning {
+  type: 'duplicate_key' | 'invalid_row';
+  message: string;
 }

@@ -9,11 +9,12 @@ import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 
-function parseNumber(val: string): number {
-  if (!val.trim()) return 0;
+/** Returns null for empty strings so empty cells aren't treated as 0 */
+function parseNumber(val: string): number | null {
+  if (!val.trim()) return null;
   const str = val.replace(/\s/g, '').replace(',', '.');
   const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
+  return isNaN(num) ? null : num;
 }
 
 function createInitialRows(): TableRow[] {
@@ -48,7 +49,10 @@ const Index = () => {
       const { rows: jtlRows } = await parseJTL(jtlFile);
       const res = compareItems(newPrices, jtlRows, identifierType);
       setResult(res);
-      toast.success(`${res.priceChanges.length} Preisänderungen gefunden`);
+      if (res.warnings.length > 0) {
+        res.warnings.forEach(w => toast.warning(w.message));
+      }
+      toast.success(`${res.priceChanges.length} Preisänderungen gefunden${res.invalidRowCount > 0 ? ` (${res.invalidRowCount} Zeilen ohne Preise übersprungen)` : ''}`);
     } catch (err) {
       toast.error('Fehler beim Vergleich: ' + (err as Error).message);
     } finally {

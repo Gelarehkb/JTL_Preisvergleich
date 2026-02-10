@@ -2,13 +2,33 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import type { NewPriceRow, JTLRow } from './types';
 
-function parseNumber(val: unknown): number {
-  if (val === null || val === undefined || val === '') return 0;
+/**
+ * Parse a numeric value. Returns null if the cell is empty/missing,
+ * so empty prices are never silently converted to 0.
+ */
+function parseNumber(val: unknown): number | null {
+  if (val === null || val === undefined || val === '') return null;
   if (typeof val === 'number') return val;
-  // Handle comma as decimal separator
   const str = String(val).replace(/\s/g, '').replace(',', '.');
+  if (str === '') return null;
   const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
+  return isNaN(num) ? null : num;
+}
+
+/** Always returns a number (defaults to 0 for stock/quantity fields) */
+function parseNumberOrZero(val: unknown): number {
+  return parseNumber(val) ?? 0;
+}
+
+/**
+ * Resolve a column value with fallback names.
+ * Tries each name in order and returns the first non-undefined value.
+ */
+function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknown {
+  for (const name of names) {
+    if (row[name] !== undefined) return row[name];
+  }
+  return undefined;
 }
 
 export function parseNewPrices(file: File, skuColumn: string, ekColumn: string, vkColumn: string): Promise<NewPriceRow[]> {
@@ -68,17 +88,17 @@ export function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[
         const rows: JTLRow[] = (result.data as Record<string, unknown>[]).map(r => ({
           internerSchluessel: String(r['Interner Schlüssel'] ?? '').trim(),
           artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
-          eanBarcode: String(r['EAN Barcode'] ?? r['EAN'] ?? '').trim(),
+          eanBarcode: String(resolveColumn(r, 'EAN Barcode', 'EAN') ?? '').trim(),
           han: String(r['HAN'] ?? '').trim(),
           artikelname: String(r['Artikelname'] ?? '').trim(),
-          ekNettoLieferant: parseNumber(r['EK netto Lieferant']),
-          vkBrutto: parseNumber(r['VK brutto']),
+          ekNettoLieferant: parseNumber(resolveColumn(r, 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
+          vkBrutto: parseNumber(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
           warengruppe: String(r['Warengruppe'] ?? '').trim(),
           hersteller: String(r['Hersteller'] ?? '').trim(),
           imZulauf: String(r['Im Zulauf'] ?? '').trim(),
-          bestandGesamt: parseNumber(r['Bestand Gesamt']),
-          bestandKG: r['Bestand KG'] !== undefined && r['Bestand KG'] !== '' ? parseNumber(r['Bestand KG']) : null,
-          bestandNG: parseNumber(r['Bestand NG']),
+          bestandGesamt: parseNumberOrZero(r['Bestand Gesamt']),
+          bestandKG: r['Bestand KG'] !== undefined && r['Bestand KG'] !== '' ? parseNumberOrZero(r['Bestand KG']) : null,
+          bestandNG: parseNumberOrZero(r['Bestand NG']),
         }));
         resolve({ rows, headers });
       },
