@@ -21,14 +21,20 @@ function downloadCsv(content: string, filename: string) {
 }
 
 export function exportPriceChanges(rows: PriceChangeRow[]) {
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
   const header = toCsvLine([
-    'Interner Schlüssel', 'Identifier Typ', 'Identifier Wert',
-    'Alt EK', 'Neu EK', 'Alt VK', 'Neu VK', 'VK Differenz'
+    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz',
+    'OLD VK', 'NEW VK', 'VK Differenz'
   ]);
-  const lines = rows.map(r => toCsvLine([
-    r.internerSchluessel, r.identifierType, r.identifierValue,
-    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.vkDifference),
-  ]));
+  const lines = rows.map(r => {
+    const ekDiff = r.oldEK !== null && r.newEK !== null ? r.newEK - r.oldEK : null;
+    const vkDiff = r.oldVK !== null && r.newVK !== null ? r.newVK - r.oldVK : null;
+    return toCsvLine([
+      r.identifierValue,
+      formatNum(r.oldEK), formatNum(r.newEK), ekDiff !== null ? formatNum(ekDiff) : 'N/A',
+      formatNum(r.oldVK), formatNum(r.newVK), vkDiff !== null ? formatNum(vkDiff) : 'N/A',
+    ]);
+  });
   downloadCsv([header, ...lines].join('\n'), 'preisaenderungen.csv');
 }
 

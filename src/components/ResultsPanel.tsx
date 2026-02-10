@@ -15,6 +15,8 @@ function fmt(n: number | null): string {
 export function ResultsPanel({ result }: ResultsPanelProps) {
   const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, missingJtlEkCount, missingJtlVkCount, warnings } = result;
 
+  const identifierLabel = priceChanges.length > 0 ? (priceChanges[0].identifierType === 'EAN' ? 'EAN' : 'HAN') : 'Identifier';
+
   const stats = [
     { label: 'Zugeordnet', value: matchedCount, color: 'text-primary' },
     { label: 'Unverändert', value: skippedCount, color: 'text-muted-foreground' },
@@ -26,27 +28,9 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
   ];
 
   const exports = [
-    {
-      label: 'Preisänderungen',
-      icon: ArrowUpDown,
-      count: priceChanges.length,
-      onClick: () => exportPriceChanges(priceChanges),
-      disabled: priceChanges.length === 0,
-    },
-    {
-      label: 'Bestand NG',
-      icon: Package,
-      count: stockNG.length,
-      onClick: () => exportStockNG(stockNG),
-      disabled: stockNG.length === 0,
-    },
-    {
-      label: 'Bestand KG',
-      icon: Warehouse,
-      count: stockKG.length,
-      onClick: () => exportStockKG(stockKG),
-      disabled: stockKG.length === 0,
-    },
+    { label: 'Preisänderungen', icon: ArrowUpDown, count: priceChanges.length, onClick: () => exportPriceChanges(priceChanges), disabled: priceChanges.length === 0 },
+    { label: 'Bestand NG', icon: Package, count: stockNG.length, onClick: () => exportStockNG(stockNG), disabled: stockNG.length === 0 },
+    { label: 'Bestand KG', icon: Warehouse, count: stockKG.length, onClick: () => exportStockKG(stockKG), disabled: stockKG.length === 0 },
   ];
 
   return (
@@ -76,13 +60,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
       {/* Export buttons */}
       <div className="grid gap-3 sm:grid-cols-3">
         {exports.map(exp => (
-          <Button
-            key={exp.label}
-            variant="outline"
-            className="h-auto flex-col gap-2 p-4 hover:border-primary hover:bg-primary/5"
-            disabled={exp.disabled}
-            onClick={exp.onClick}
-          >
+          <Button key={exp.label} variant="outline" className="h-auto flex-col gap-2 p-4 hover:border-primary hover:bg-primary/5" disabled={exp.disabled} onClick={exp.onClick}>
             <div className="flex items-center gap-2">
               <exp.icon className="h-4 w-4" />
               <Download className="h-3.5 w-3.5" />
@@ -93,23 +71,23 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
         ))}
       </div>
 
-      {/* Preview table */}
+      {/* Comparison result table — fixed 7-column schema, all rows, no limits */}
       {priceChanges.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden">
           <div className="border-b bg-muted/50 px-4 py-2.5">
-            <p className="text-sm font-semibold">Preisänderungen</p>
+            <p className="text-sm font-semibold">Preisänderungen ({priceChanges.length} Zeilen)</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">{priceChanges[0]?.identifierType === 'EAN' ? 'EAN' : 'HAN'}</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">{identifierLabel}</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">OLD EK</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">NEW EK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">ΔEK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">EK Diff.</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">OLD VK</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">NEW VK</th>
-                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">ΔVK</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">VK Diff.</th>
                 </tr>
               </thead>
               <tbody>
