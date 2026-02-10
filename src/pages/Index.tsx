@@ -74,51 +74,26 @@ const Index = () => {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        {/* Identifier Toggle */}
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-muted-foreground">Zuordnung über:</span>
-          <div className="inline-flex rounded-lg border bg-muted p-0.5">
-            {(['HAN', 'EAN'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => { setIdentifierType(type); setResult(null); }}
-                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-                  identifierType === type
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {type === 'EAN' ? 'EAN Barcode' : 'HAN'}
-              </button>
-            ))}
+        {/* Top Bar: Identifier Toggle + Compare Button */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Zuordnung über:</span>
+            <div className="inline-flex rounded-lg border bg-muted p-0.5">
+              {(['HAN', 'EAN'] as const).map(type => (
+                <button
+                  key={type}
+                  onClick={() => { setIdentifierType(type); setResult(null); }}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                    identifierType === type
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {type === 'EAN' ? 'EAN Barcode' : 'HAN'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* New Price List - Editable Table */}
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
-          <EditableTable
-            identifierType={identifierType}
-            rows={tableRows}
-            onChange={(rows) => { setTableRows(rows); setResult(null); }}
-          />
-        </section>
-
-        {/* JTL Export Upload */}
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-foreground">JTL Export</h2>
-          <FileUploadZone
-            label="JTL Export hochladen"
-            description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
-            accept=".csv"
-            file={jtlFile}
-            onFile={(f) => { setJtlFile(f); setResult(null); }}
-            onClear={() => { setJtlFile(null); setResult(null); }}
-          />
-        </section>
-
-        {/* Compare Button */}
-        <div className="flex justify-center">
           <Button
             size="lg"
             disabled={!canCompare || loading}
