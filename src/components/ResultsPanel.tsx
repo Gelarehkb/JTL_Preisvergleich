@@ -13,7 +13,7 @@ function fmt(n: number | null): string {
 }
 
 export function ResultsPanel({ result }: ResultsPanelProps) {
-  const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, warnings } = result;
+  const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, missingJtlEkCount, missingJtlVkCount, warnings } = result;
 
   const stats = [
     { label: 'Zugeordnet', value: matchedCount, color: 'text-primary' },
@@ -21,6 +21,8 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
     { label: 'Geändert', value: priceChanges.length, color: 'text-success' },
     { label: 'Nicht gefunden', value: unmatchedCount, color: 'text-destructive' },
     ...(invalidRowCount > 0 ? [{ label: 'Ungültige Zeilen', value: invalidRowCount, color: 'text-warning' }] : []),
+    ...(missingJtlEkCount > 0 ? [{ label: 'JTL ohne EK', value: missingJtlEkCount, color: 'text-warning' }] : []),
+    ...(missingJtlVkCount > 0 ? [{ label: 'JTL ohne VK', value: missingJtlVkCount, color: 'text-warning' }] : []),
   ];
 
   const exports = [
