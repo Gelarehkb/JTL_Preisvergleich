@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { parseJTL } from '@/lib/parseFiles';
+import { parseJTL, parseNewPricesCsv } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -33,8 +33,32 @@ const Index = () => {
   const [jtlFile, setJtlFile] = useState<File | null>(null);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
+
+  /** Import a new-prices CSV into the editable table */
+  const handleNewPriceCsv = useCallback(async (file: File) => {
+    try {
+      const parsed = await parseNewPricesCsv(file);
+      if (parsed.length === 0) {
+        toast.error('Keine gültigen Zeilen in der CSV gefunden');
+        return;
+      }
+      const imported: TableRow[] = parsed.map((r, i) => ({
+        id: `csv-${Date.now()}-${i}`,
+        identifier: r.sku,
+        newEK: r.newEK !== null ? String(r.newEK).replace('.', ',') : '',
+        newVK: r.newVK !== null ? String(r.newVK).replace('.', ',') : '',
+      }));
+      setTableRows(imported);
+      setNewPriceCsvFile(file);
+      setResult(null);
+      toast.success(`${parsed.length} Zeilen importiert`);
+    } catch (err) {
+      toast.error('CSV Fehler: ' + (err as Error).message);
+    }
+  }, []);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
@@ -122,9 +146,17 @@ const Index = () => {
           />
         </section>
 
-        {/* New Price List - Editable Table */}
+        {/* New Price List - CSV Upload or Editable Table */}
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
+          <FileUploadZone
+            label="Neue Preisliste CSV hochladen"
+            description={`CSV mit 3 Spalten: ${identifierType === 'EAN' ? 'EAN' : 'HAN'};Neu EK;Neu VK (Semikolon-getrennt)`}
+            accept=".csv"
+            file={newPriceCsvFile}
+            onFile={handleNewPriceCsv}
+            onClear={() => { setNewPriceCsvFile(null); setTableRows(createInitialRows()); setResult(null); }}
+          />
           <EditableTable
             identifierType={identifierType}
             rows={tableRows}
