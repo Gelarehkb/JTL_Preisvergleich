@@ -1,20 +1,26 @@
 import type { ComparisonResult } from '@/lib/comparison';
 import { exportPriceChanges, exportStockNG, exportStockKG } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse } from 'lucide-react';
+import { Download, ArrowUpDown, Package, Warehouse, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
   result: ComparisonResult;
 }
 
+function fmt(n: number | null): string {
+  if (n === null) return '–';
+  return n.toFixed(2);
+}
+
 export function ResultsPanel({ result }: ResultsPanelProps) {
-  const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount } = result;
+  const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, warnings } = result;
 
   const stats = [
     { label: 'Zugeordnet', value: matchedCount, color: 'text-primary' },
     { label: 'Unverändert', value: skippedCount, color: 'text-muted-foreground' },
     { label: 'Geändert', value: priceChanges.length, color: 'text-success' },
     { label: 'Nicht gefunden', value: unmatchedCount, color: 'text-destructive' },
+    ...(invalidRowCount > 0 ? [{ label: 'Ungültige Zeilen', value: invalidRowCount, color: 'text-warning' }] : []),
   ];
 
   const exports = [
@@ -43,6 +49,18 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
 
   return (
     <div className="space-y-6">
+      {/* Warnings */}
+      {warnings.length > 0 && (
+        <div className="space-y-2">
+          {warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+              <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+              <p className="text-sm text-foreground">{w.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map(s => (
@@ -97,12 +115,12 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                   <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
                     <td className="px-3 py-2 font-mono">{r.internerSchluessel}</td>
                     <td className="px-3 py-2 font-mono">{r.identifierValue}</td>
-                    <td className="px-3 py-2 text-right font-mono">{r.oldEK.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{r.newEK.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{r.oldVK.toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{r.newVK.toFixed(2)}</td>
-                    <td className={`px-3 py-2 text-right font-mono font-semibold ${r.vkDifference > 0 ? 'text-destructive' : r.vkDifference < 0 ? 'text-success' : ''}`}>
-                      {r.vkDifference > 0 ? '+' : ''}{r.vkDifference.toFixed(2)}
+                    <td className="px-3 py-2 text-right font-mono">{fmt(r.oldEK)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{fmt(r.newEK)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{fmt(r.oldVK)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{fmt(r.newVK)}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-semibold ${r.vkDifference !== null && r.vkDifference > 0 ? 'text-destructive' : r.vkDifference !== null && r.vkDifference < 0 ? 'text-success' : ''}`}>
+                      {r.vkDifference !== null ? `${r.vkDifference > 0 ? '+' : ''}${r.vkDifference.toFixed(2)}` : '–'}
                     </td>
                   </tr>
                 ))}
