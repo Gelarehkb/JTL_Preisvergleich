@@ -36,16 +36,21 @@ function normalizeKey(value: string, type: IdentifierType): string {
   return trimmed;
 }
 
+/** Round to 2 decimals to eliminate float precision artifacts */
+function round2(val: number): number {
+  return Math.round(val * 100) / 100;
+}
+
 /**
- * Nullable XOR comparison:
+ * Nullable XOR comparison with rounding:
  * - both null → false (no change)
  * - exactly one null → true (change)
- * - both present → |a-b| > tolerance
+ * - both present → round both, then |a-b| > tolerance (strict >)
  */
 function pricesChanged(oldVal: number | null, newVal: number | null): boolean {
   if (oldVal === null && newVal === null) return false;
   if (oldVal === null || newVal === null) return true;
-  return Math.abs(newVal - oldVal) >= PRICE_TOLERANCE;
+  return Math.abs(round2(newVal) - round2(oldVal)) > PRICE_TOLERANCE;
 }
 
 function roundPrice(val: number | null): number | null {
@@ -94,6 +99,8 @@ export function compareItems(
   let missingJtlEkCount = 0;
   let missingJtlVkCount = 0;
 
+  const unmatchedIdentifiers: string[] = [];
+
   for (const np of newPrices) {
     // Skip rows where both EK and VK are null (empty input)
     if (np.newEK === null && np.newVK === null) {
@@ -101,11 +108,14 @@ export function compareItems(
       continue;
     }
 
-    const key = normalizeKey(np.sku, identifierType);
-    const jtl = jtlMap.get(key);
+    const newKey = normalizeKey(np.sku, identifierType);
+    const jtl = jtlMap.get(newKey);
 
     if (!jtl) {
       unmatchedCount++;
+      if (unmatchedIdentifiers.length < 5) {
+        unmatchedIdentifiers.push(np.sku);
+      }
       continue;
     }
 
@@ -139,6 +149,12 @@ export function compareItems(
       newVK: np.newVK,
       vkDifference: vkDiff,
     });
+  }
+
+  // Temporary diagnostics
+  console.log('[compareItems] matchedCount:', matchedCount, 'unmatchedCount:', unmatchedCount, 'priceChanges:', priceChanges.length);
+  if (unmatchedIdentifiers.length > 0) {
+    console.log('[compareItems] first unmatched identifiers:', unmatchedIdentifiers);
   }
 
   // Build stock-filtered lists
