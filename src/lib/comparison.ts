@@ -1,11 +1,13 @@
 import Decimal from 'decimal.js';
-import type { IdentifierType, NewPriceRow, JTLRow, ComparisonResultRow, UnmatchedRow } from './types';
+import type { IdentifierType, NewPriceRow, JTLRow, ComparisonResultRow, UnmatchedRow, UnmatchedJTLRow } from './types';
 
 export interface ComparisonResult {
   /** All matched rows (changed AND unchanged) */
   rows: ComparisonResultRow[];
   /** Input rows with no JTL match */
   unmatchedRows: UnmatchedRow[];
+  /** JTL rows with no input match */
+  unmatchedJTLRows: UnmatchedJTLRow[];
   /** Duplicate identifiers found in JTL (first occurrence kept) */
   duplicateIdentifiers: string[];
   matchedCount: number;
@@ -156,9 +158,30 @@ export function compareItems(
     });
   }
 
+  // ── Step 3: Collect unmatched JTL rows ──
+  const matchedKeys = new Set<string>();
+  for (const np of newPrices) {
+    const key = normalizeKey(np.sku, identifierType);
+    if (jtlMap.has(key)) matchedKeys.add(key);
+  }
+
+  const unmatchedJTLRows: UnmatchedJTLRow[] = [];
+  for (const [key, jtl] of jtlMap) {
+    if (!matchedKeys.has(key)) {
+      unmatchedJTLRows.push({
+        internerSchluessel: jtl.internerSchluessel,
+        identifier: key,
+        bestandKG: jtl.bestandKG,
+        bestandNG: jtl.bestandNG,
+        imZulauf: jtl.imZulauf,
+        bestandGesamt: jtl.bestandGesamt,
+      });
+    }
+  }
+
   // Diagnostics
   console.log('[compareItems] total JTL rows:', jtlRows.length, 'total new rows:', newPrices.length);
-  console.log('[compareItems] matched:', rows.length, 'unmatched:', unmatchedRows.length);
+  console.log('[compareItems] matched:', rows.length, 'unmatched:', unmatchedRows.length, 'unmatchedJTL:', unmatchedJTLRows.length);
   if (unmatchedRows.length > 0) {
     console.log('[compareItems] first unmatched:', unmatchedRows.slice(0, 5).map(r => r.identifier));
   }
@@ -168,6 +191,7 @@ export function compareItems(
   return {
     rows,
     unmatchedRows,
+    unmatchedJTLRows,
     duplicateIdentifiers,
     matchedCount: rows.length,
     unmatchedCount: unmatchedRows.length,

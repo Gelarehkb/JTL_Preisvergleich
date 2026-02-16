@@ -1,6 +1,6 @@
 import type { ComparisonResult } from '@/lib/comparison';
-import { exportAllRows, exportChangedOnly, exportStockNG, exportStockKG } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle } from 'lucide-react';
+import { exportAllRows, exportChangedOnly, exportStockNG, exportStockKG, exportBestandNGgt0, exportBestandKGgt0, exportVKDiffNotZero, exportDCEan } from '@/lib/exportCsv';
+import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, Filter, FileX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
@@ -13,11 +13,15 @@ function fmt(n: number | null): string {
 }
 
 export function ResultsPanel({ result }: ResultsPanelProps) {
-  const { rows, unmatchedRows, matchedCount, unmatchedCount } = result;
+  const { rows, unmatchedRows, unmatchedJTLRows, matchedCount, unmatchedCount } = result;
 
   const changedRows = rows.filter(r => r.changedEK || r.changedVK);
   const stockNGCount = rows.filter(r => (r.changedEK || r.changedVK) && r.bestandNG > 0).length;
   const stockKGCount = rows.filter(r => (r.changedEK || r.changedVK) && r.bestandKG !== null && r.bestandKG > 0).length;
+  const bestandNGgt0Count = rows.filter(r => r.bestandNG > 0).length;
+  const bestandKGgt0Count = rows.filter(r => r.bestandKG !== null && r.bestandKG > 0).length;
+  const vkDiffCount = rows.filter(r => r.deltaVK !== null && r.deltaVK !== 0).length;
+  const dcEanCount = unmatchedJTLRows.length;
 
   const identifierLabel = rows.length > 0 ? (rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN') : 'Identifier';
 
@@ -33,6 +37,10 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
     { label: 'Nur Änderungen', icon: ArrowUpDown, count: changedRows.length, onClick: () => exportChangedOnly(rows), disabled: changedRows.length === 0 },
     { label: 'Bestand NG', icon: Package, count: stockNGCount, onClick: () => exportStockNG(rows), disabled: stockNGCount === 0 },
     { label: 'Bestand KG', icon: Warehouse, count: stockKGCount, onClick: () => exportStockKG(rows), disabled: stockKGCount === 0 },
+    { label: 'Bestand NG > 0', icon: Package, count: bestandNGgt0Count, onClick: () => exportBestandNGgt0(rows), disabled: bestandNGgt0Count === 0 },
+    { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows), disabled: bestandKGgt0Count === 0 },
+    { label: 'VK Diff ≠ 0', icon: Filter, count: vkDiffCount, onClick: () => exportVKDiffNotZero(rows), disabled: vkDiffCount === 0 },
+    { label: 'DC/EAN', icon: FileX, count: dcEanCount, onClick: () => exportDCEan(unmatchedJTLRows), disabled: dcEanCount === 0 },
   ];
 
   return (
