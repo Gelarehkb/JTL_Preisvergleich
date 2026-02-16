@@ -11,10 +11,16 @@ export interface ComparisonResult {
 }
 
 /**
- * Normalize identifier: trim whitespace only.
+ * Normalize identifier based on type.
+ * HAN: trim whitespace only.
+ * EAN: extract leading digit sequence to strip trailing text like "inaktiv".
  * No leading-zero stripping. No number casting.
  */
-function trimKey(value: string): string {
+function normalizeKey(value: string, identifierType: IdentifierType): string {
+  if (identifierType === 'EAN') {
+    const match = value.trim().match(/^\d+/);
+    return match ? match[0] : value.trim();
+  }
   return value.trim();
 }
 
@@ -53,7 +59,7 @@ export function compareItems(
   for (const row of jtlRows) {
     const rawKey = identifierType === 'HAN' ? row.han : row.eanBarcode;
     if (!rawKey) continue;
-    const key = trimKey(rawKey);
+    const key = normalizeKey(rawKey, identifierType);
     if (!key) continue;
 
     keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
@@ -84,7 +90,7 @@ export function compareItems(
   const unmatchedRows: UnmatchedRow[] = [];
 
   for (const np of newPrices) {
-    const key = trimKey(np.sku);
+    const key = normalizeKey(np.sku, identifierType);
     const jtl = jtlMap.get(key);
 
     if (!jtl) {
@@ -150,10 +156,13 @@ export function compareItems(
   }
 
   // Diagnostics
+  console.log('[compareItems] total JTL rows:', jtlRows.length, 'total new rows:', newPrices.length);
   console.log('[compareItems] matched:', rows.length, 'unmatched:', unmatchedRows.length);
   if (unmatchedRows.length > 0) {
     console.log('[compareItems] first unmatched:', unmatchedRows.slice(0, 5).map(r => r.identifier));
   }
+  console.log('[compareItems] first 3 JTL keys:', Array.from(jtlMap.keys()).slice(0, 3));
+  console.log('[compareItems] first 3 new keys:', newPrices.slice(0, 3).map(np => normalizeKey(np.sku, identifierType)));
 
   return {
     rows,

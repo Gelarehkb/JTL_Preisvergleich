@@ -88,10 +88,10 @@ export function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[
         const rows: JTLRow[] = (result.data as Record<string, unknown>[]).map(r => ({
           internerSchluessel: String(r['Interner Schlüssel'] ?? '').trim(),
           artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
-          eanBarcode: String(resolveColumn(r, 'EAN Barcode', 'EAN') ?? '').trim(),
+          eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
           han: String(r['HAN'] ?? '').trim(),
           artikelname: String(r['Artikelname'] ?? '').trim(),
-          ekNettoLieferant: parseNumber(resolveColumn(r, 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
+          ekNettoLieferant: parseNumber(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
           vkBrutto: parseNumber(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
           warengruppe: String(r['Warengruppe'] ?? '').trim(),
           hersteller: String(r['Hersteller'] ?? '').trim(),
