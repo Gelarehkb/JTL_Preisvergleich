@@ -51,3 +51,13 @@ export interface UnmatchedRow {
   newEK: number | null;
   newVK: number | null;
 }
+
+/** A JTL row that was NOT matched by any input row */
+export interface UnmatchedJTLRow {
+  internerSchluessel: string;
+  identifier: string;
+  bestandKG: number | null;
+  bestandNG: number;
+  imZulauf: string;
+  bestandGesamt: number;
+}

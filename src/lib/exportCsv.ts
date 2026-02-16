@@ -1,4 +1,4 @@
-import type { ComparisonResultRow } from './types';
+import type { ComparisonResultRow, UnmatchedJTLRow } from './types';
 
 function formatNum(n: number | null): string {
   if (n === null) return '';
@@ -77,4 +77,83 @@ export function exportStockKG(rows: ComparisonResultRow[]) {
     String(r.bestandKG),
   ]));
   downloadCsv([header, ...lines].join('\n'), 'bestand_kg.csv');
+}
+
+/* ── New exports ── */
+
+export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
+  const filtered = rows.filter(r => r.bestandNG > 0);
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
+  const header = toCsvLine([
+    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
+    'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
+    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
+  ]);
+  const lines = filtered.map(r => toCsvLine([
+    r.identifier,
+    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK), r.changedEK ? 'Ja' : 'Nein',
+    formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK), r.changedVK ? 'Ja' : 'Nein',
+    r.imZulauf, String(r.bestandGesamt),
+    r.bestandKG !== null ? String(r.bestandKG) : '',
+    String(r.bestandNG),
+  ]));
+  downloadCsv([header, ...lines].join('\n'), 'export_bestand_ng_gt_0.csv');
+}
+
+export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
+  const filtered = rows.filter(r => r.bestandKG !== null && r.bestandKG > 0);
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
+  const header = toCsvLine([
+    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
+    'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
+    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
+  ]);
+  const lines = filtered.map(r => toCsvLine([
+    r.identifier,
+    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK), r.changedEK ? 'Ja' : 'Nein',
+    formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK), r.changedVK ? 'Ja' : 'Nein',
+    r.imZulauf, String(r.bestandGesamt),
+    String(r.bestandKG),
+    String(r.bestandNG),
+  ]));
+  downloadCsv([header, ...lines].join('\n'), 'export_bestand_kg_gt_0.csv');
+}
+
+export function exportVKDiffNotZero(rows: ComparisonResultRow[]) {
+  const filtered = rows.filter(r => r.deltaVK !== null && r.deltaVK !== 0);
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
+  const header = toCsvLine([
+    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz',
+    'OLD VK', 'NEW VK', 'VK Differenz',
+    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
+  ]);
+  const lines = filtered.map(r => toCsvLine([
+    r.identifier,
+    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK),
+    formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK),
+    r.imZulauf, String(r.bestandGesamt),
+    r.bestandKG !== null ? String(r.bestandKG) : '',
+    String(r.bestandNG),
+  ]));
+  downloadCsv([header, ...lines].join('\n'), 'export_vk_diff_not_zero.csv');
+}
+
+export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
+  const header = toCsvLine([
+    'interner Schlüssel', 'Bestand KG', 'Bestand NG', 'Im Zulauf', 'DC/OP', 'active',
+  ]);
+  const lines = unmatchedJTLRows.map(r => {
+    const imZulaufNum = parseInt(r.imZulauf, 10) || 0;
+    const bestandKG = r.bestandKG ?? 0;
+    const dcOp = (bestandKG > 0 || r.bestandNG > 0 || imZulaufNum > 0 || r.bestandGesamt > 0) ? 'OP' : 'DC';
+    return toCsvLine([
+      r.internerSchluessel,
+      r.bestandKG !== null ? String(r.bestandKG) : '',
+      String(r.bestandNG),
+      r.imZulauf,
+      dcOp,
+      'N',
+    ]);
+  });
+  downloadCsv([header, ...lines].join('\n'), 'export_DC_ean.csv');
 }
