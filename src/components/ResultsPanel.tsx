@@ -1,6 +1,6 @@
 import type { ComparisonResult } from '@/lib/comparison';
-import { exportPriceChanges, exportStockNG, exportStockKG } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse, AlertTriangle } from 'lucide-react';
+import { exportAllRows, exportChangedOnly, exportStockNG, exportStockKG } from '@/lib/exportCsv';
+import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
@@ -13,37 +13,38 @@ function fmt(n: number | null): string {
 }
 
 export function ResultsPanel({ result }: ResultsPanelProps) {
-  const { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, missingJtlEkCount, missingJtlVkCount, warnings } = result;
+  const { rows, unmatchedRows, matchedCount, unmatchedCount } = result;
 
-  const identifierLabel = priceChanges.length > 0 ? (priceChanges[0].identifierType === 'EAN' ? 'EAN' : 'HAN') : 'Identifier';
+  const changedRows = rows.filter(r => r.changedEK || r.changedVK);
+  const stockNGCount = rows.filter(r => (r.changedEK || r.changedVK) && r.bestandNG > 0).length;
+  const stockKGCount = rows.filter(r => (r.changedEK || r.changedVK) && r.bestandKG !== null && r.bestandKG > 0).length;
+
+  const identifierLabel = rows.length > 0 ? (rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN') : 'Identifier';
 
   const stats = [
     { label: 'Zugeordnet', value: matchedCount, color: 'text-primary' },
-    { label: 'Unverändert', value: skippedCount, color: 'text-muted-foreground' },
-    { label: 'Geändert', value: priceChanges.length, color: 'text-success' },
+    { label: 'Geändert', value: changedRows.length, color: 'text-success' },
+    { label: 'Unverändert', value: matchedCount - changedRows.length, color: 'text-muted-foreground' },
     { label: 'Nicht gefunden', value: unmatchedCount, color: 'text-destructive' },
-    ...(invalidRowCount > 0 ? [{ label: 'Ungültige Zeilen', value: invalidRowCount, color: 'text-warning' }] : []),
-    ...(missingJtlEkCount > 0 ? [{ label: 'JTL ohne EK', value: missingJtlEkCount, color: 'text-warning' }] : []),
-    ...(missingJtlVkCount > 0 ? [{ label: 'JTL ohne VK', value: missingJtlVkCount, color: 'text-warning' }] : []),
   ];
 
   const exports = [
-    { label: 'Preisänderungen', icon: ArrowUpDown, count: priceChanges.length, onClick: () => exportPriceChanges(priceChanges), disabled: priceChanges.length === 0 },
-    { label: 'Bestand NG', icon: Package, count: stockNG.length, onClick: () => exportStockNG(stockNG), disabled: stockNG.length === 0 },
-    { label: 'Bestand KG', icon: Warehouse, count: stockKG.length, onClick: () => exportStockKG(stockKG), disabled: stockKG.length === 0 },
+    { label: 'Alle Zeilen', icon: List, count: rows.length, onClick: () => exportAllRows(rows), disabled: rows.length === 0 },
+    { label: 'Nur Änderungen', icon: ArrowUpDown, count: changedRows.length, onClick: () => exportChangedOnly(rows), disabled: changedRows.length === 0 },
+    { label: 'Bestand NG', icon: Package, count: stockNGCount, onClick: () => exportStockNG(rows), disabled: stockNGCount === 0 },
+    { label: 'Bestand KG', icon: Warehouse, count: stockKGCount, onClick: () => exportStockKG(rows), disabled: stockKGCount === 0 },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Warnings */}
-      {warnings.length > 0 && (
-        <div className="space-y-2">
-          {warnings.map((w, i) => (
-            <div key={i} className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
-              <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-              <p className="text-sm text-foreground">{w.message}</p>
-            </div>
-          ))}
+      {/* Unmatched warning */}
+      {unmatchedRows.length > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+          <p className="text-sm text-foreground">
+            {unmatchedRows.length} Eingabe-Zeile(n) ohne Treffer im JTL Export: {unmatchedRows.slice(0, 5).map(r => r.identifier).join(', ')}
+            {unmatchedRows.length > 5 ? ` …und ${unmatchedRows.length - 5} weitere` : ''}
+          </p>
         </div>
       )}
 
@@ -58,7 +59,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
       </div>
 
       {/* Export buttons */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         {exports.map(exp => (
           <Button key={exp.label} variant="outline" className="h-auto flex-col gap-2 p-4 hover:border-primary hover:bg-primary/5" disabled={exp.disabled} onClick={exp.onClick}>
             <div className="flex items-center gap-2">
@@ -71,11 +72,11 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
         ))}
       </div>
 
-      {/* Comparison result table — fixed 7-column schema, all rows, no limits */}
-      {priceChanges.length > 0 && (
+      {/* Result table — ALL matched rows */}
+      {rows.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden">
           <div className="border-b bg-muted/50 px-4 py-2.5">
-            <p className="text-sm font-semibold">Preisänderungen ({priceChanges.length} Zeilen)</p>
+            <p className="text-sm font-semibold">Vergleichsergebnis ({rows.length} Zeilen, {changedRows.length} geändert)</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -88,25 +89,28 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">OLD VK</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">NEW VK</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">VK Diff.</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Bestand NG</th>
+                  <th className="px-3 py-2 text-right font-medium text-muted-foreground">Bestand KG</th>
                 </tr>
               </thead>
               <tbody>
-                {priceChanges.map((r, i) => {
-                  const ekDiff = r.oldEK !== null && r.newEK !== null ? r.newEK - r.oldEK : null;
-                  const vkDiff = r.oldVK !== null && r.newVK !== null ? r.newVK - r.oldVK : null;
+                {rows.map((r, i) => {
+                  const hasChange = r.changedEK || r.changedVK;
                   return (
-                    <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="px-3 py-2 font-mono">{r.identifierValue}</td>
+                    <tr key={i} className={`border-b last:border-0 hover:bg-muted/20 ${!hasChange ? 'opacity-50' : ''}`}>
+                      <td className="px-3 py-2 font-mono">{r.identifier}</td>
                       <td className="px-3 py-2 text-right font-mono">{fmt(r.oldEK)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(r.newEK)}</td>
-                      <td className={`px-3 py-2 text-right font-mono font-semibold ${ekDiff !== null && ekDiff > 0 ? 'text-destructive' : ekDiff !== null && ekDiff < 0 ? 'text-success' : ''}`}>
-                        {ekDiff !== null ? `${ekDiff > 0 ? '+' : ''}${ekDiff.toFixed(2)}` : 'N/A'}
+                      <td className={`px-3 py-2 text-right font-mono ${r.changedEK ? 'font-semibold' : ''}`}>{fmt(r.newEK)}</td>
+                      <td className={`px-3 py-2 text-right font-mono font-semibold ${r.deltaEK !== null && r.deltaEK > 0 ? 'text-destructive' : r.deltaEK !== null && r.deltaEK < 0 ? 'text-success' : ''}`}>
+                        {r.deltaEK !== null ? `${r.deltaEK > 0 ? '+' : ''}${r.deltaEK.toFixed(2)}` : '–'}
                       </td>
                       <td className="px-3 py-2 text-right font-mono">{fmt(r.oldVK)}</td>
-                      <td className="px-3 py-2 text-right font-mono">{fmt(r.newVK)}</td>
-                      <td className={`px-3 py-2 text-right font-mono font-semibold ${vkDiff !== null && vkDiff > 0 ? 'text-destructive' : vkDiff !== null && vkDiff < 0 ? 'text-success' : ''}`}>
-                        {vkDiff !== null ? `${vkDiff > 0 ? '+' : ''}${vkDiff.toFixed(2)}` : 'N/A'}
+                      <td className={`px-3 py-2 text-right font-mono ${r.changedVK ? 'font-semibold' : ''}`}>{fmt(r.newVK)}</td>
+                      <td className={`px-3 py-2 text-right font-mono font-semibold ${r.deltaVK !== null && r.deltaVK > 0 ? 'text-destructive' : r.deltaVK !== null && r.deltaVK < 0 ? 'text-success' : ''}`}>
+                        {r.deltaVK !== null ? `${r.deltaVK > 0 ? '+' : ''}${r.deltaVK.toFixed(2)}` : '–'}
                       </td>
+                      <td className="px-3 py-2 text-right font-mono">{r.bestandNG}</td>
+                      <td className="px-3 py-2 text-right font-mono">{r.bestandKG !== null ? r.bestandKG : '–'}</td>
                     </tr>
                   );
                 })}

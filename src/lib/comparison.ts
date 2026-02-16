@@ -1,176 +1,164 @@
-import type { IdentifierType, NewPriceRow, JTLRow, PriceChangeRow, StockNGRow, StockKGRow, ComparisonWarning } from './types';
+import Decimal from 'decimal.js';
+import type { IdentifierType, NewPriceRow, JTLRow, ComparisonResultRow, UnmatchedRow } from './types';
 
 export interface ComparisonResult {
-  priceChanges: PriceChangeRow[];
-  stockNG: StockNGRow[];
-  stockKG: StockKGRow[];
+  /** All matched rows (changed AND unchanged) */
+  rows: ComparisonResultRow[];
+  /** Input rows with no JTL match */
+  unmatchedRows: UnmatchedRow[];
   matchedCount: number;
-  skippedCount: number;
   unmatchedCount: number;
-  /** Rows excluded because both EK and VK were null in the new price list */
-  invalidRowCount: number;
-  /** Count of matched rows where JTL EK was null */
-  missingJtlEkCount: number;
-  /** Count of matched rows where JTL VK was null */
-  missingJtlVkCount: number;
-  warnings: ComparisonWarning[];
 }
 
 /**
- * Tolerance for price comparison: 0.005
- * This aligns with 2-decimal rounding — a difference < 0.005 rounds to 0.00
- * and is therefore not a real cent-level change.
+ * Normalize identifier: trim whitespace only.
+ * No leading-zero stripping. No number casting.
  */
-const PRICE_TOLERANCE = 0.005;
-
-/**
- * Normalize identifier strings for matching:
- * - Trim whitespace
- * - For EAN: strip leading zeros so "0012345" matches "12345"
- */
-function normalizeKey(value: string, type: IdentifierType): string {
-  const trimmed = value.trim();
-  if (type === 'EAN' && /^\d+$/.test(trimmed)) {
-    return trimmed.replace(/^0+/, '') || '0';
-  }
-  return trimmed;
-}
-
-/** Round to 2 decimals to eliminate float precision artifacts */
-function round2(val: number): number {
-  return Math.round(val * 100) / 100;
+function trimKey(value: string): string {
+  return value.trim();
 }
 
 /**
- * Nullable XOR comparison with rounding:
- * - both null → false (no change)
- * - exactly one null → true (change)
- * - both present → round both, then |a-b| > tolerance (strict >)
+ * Exact decimal equality using Decimal.js.
+ * Returns true if the two numbers are exactly equal in decimal representation.
  */
-function pricesChanged(oldVal: number | null, newVal: number | null): boolean {
-  if (oldVal === null && newVal === null) return false;
-  if (oldVal === null || newVal === null) return true;
-  return Math.abs(round2(newVal) - round2(oldVal)) > PRICE_TOLERANCE;
+function decimalEq(a: number, b: number): boolean {
+  return new Decimal(a).eq(new Decimal(b));
 }
 
-function roundPrice(val: number | null): number | null {
-  if (val === null) return null;
-  return Math.round(val * 100) / 100;
+/**
+ * Exact decimal subtraction using Decimal.js.
+ * Returns the result as a JS number for storage.
+ */
+function decimalSub(a: number, b: number): number {
+  return new Decimal(a).minus(new Decimal(b)).toNumber();
 }
 
+/**
+ * Compare a JTL export against manually entered new prices.
+ *
+ * Throws on duplicate identifiers in JTL for the chosen mode.
+ * Returns ALL matched rows (not only changed ones).
+ * Null new prices mean "no update provided" — rows are never skipped.
+ */
 export function compareItems(
   newPrices: NewPriceRow[],
   jtlRows: JTLRow[],
   identifierType: IdentifierType
 ): ComparisonResult {
-  const warnings: ComparisonWarning[] = [];
-
-  // Build lookup map with duplicate detection
+  // ── Step 1: Build lookup map with strict duplicate detection ──
   const jtlMap = new Map<string, JTLRow>();
-  const seenKeys = new Map<string, number>();
+  const keyCounts = new Map<string, number>();
 
   for (const row of jtlRows) {
     const rawKey = identifierType === 'HAN' ? row.han : row.eanBarcode;
     if (!rawKey) continue;
-    const key = normalizeKey(rawKey, identifierType);
+    const key = trimKey(rawKey);
     if (!key) continue;
 
-    const count = (seenKeys.get(key) ?? 0) + 1;
-    seenKeys.set(key, count);
+    keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
 
-    if (count === 2) {
-      warnings.push({
-        type: 'duplicate_key',
-        message: `Duplikat ${identifierType} "${rawKey}" im JTL Export (${count}+ Zeilen). Nur die erste Zeile wird verwendet.`,
-      });
-    }
-
-    // Keep first occurrence only
     if (!jtlMap.has(key)) {
       jtlMap.set(key, row);
     }
   }
 
-  const priceChanges: PriceChangeRow[] = [];
-  let matchedCount = 0;
-  let skippedCount = 0;
-  let unmatchedCount = 0;
-  let invalidRowCount = 0;
-  let missingJtlEkCount = 0;
-  let missingJtlVkCount = 0;
+  // Collect duplicates and throw if any exist
+  const duplicates: string[] = [];
+  for (const [key, count] of keyCounts) {
+    if (count > 1) {
+      duplicates.push(`${key} (${count}×)`);
+    }
+  }
+  if (duplicates.length > 0) {
+    const shown = duplicates.slice(0, 10).join(', ');
+    const extra = duplicates.length > 10 ? ` und ${duplicates.length - 10} weitere` : '';
+    throw new Error(
+      `Duplikate im JTL Export für ${identifierType}: ${shown}${extra}. ` +
+      `Bitte bereinigen Sie die JTL-Daten vor dem Vergleich.`
+    );
+  }
 
-  const unmatchedIdentifiers: string[] = [];
+  // ── Step 2: Match and compare ──
+  const rows: ComparisonResultRow[] = [];
+  const unmatchedRows: UnmatchedRow[] = [];
 
   for (const np of newPrices) {
-    // Skip rows where both EK and VK are null (empty input)
-    if (np.newEK === null && np.newVK === null) {
-      invalidRowCount++;
-      continue;
-    }
-
-    const newKey = normalizeKey(np.sku, identifierType);
-    const jtl = jtlMap.get(newKey);
+    const key = trimKey(np.sku);
+    const jtl = jtlMap.get(key);
 
     if (!jtl) {
-      unmatchedCount++;
-      if (unmatchedIdentifiers.length < 5) {
-        unmatchedIdentifiers.push(np.sku);
+      unmatchedRows.push({
+        identifier: np.sku,
+        newEK: np.newEK,
+        newVK: np.newVK,
+      });
+      continue;
+    }
+
+    // EK comparison
+    const oldEK = jtl.ekNettoLieferant;
+    const newEK = np.newEK;
+    let deltaEK: number | null = null;
+    let changedEK = false;
+
+    if (newEK !== null) {
+      if (oldEK !== null) {
+        deltaEK = decimalSub(newEK, oldEK);
+        changedEK = !decimalEq(newEK, oldEK);
+      } else {
+        // oldEK is null, newEK is provided → considered a change
+        deltaEK = null;
+        changedEK = true;
       }
-      continue;
+    }
+    // newEK === null → no update, changedEK stays false
+
+    // VK comparison
+    const oldVK = jtl.vkBrutto;
+    const newVK = np.newVK;
+    let deltaVK: number | null = null;
+    let changedVK = false;
+
+    if (newVK !== null) {
+      if (oldVK !== null) {
+        deltaVK = decimalSub(newVK, oldVK);
+        changedVK = !decimalEq(newVK, oldVK);
+      } else {
+        deltaVK = null;
+        changedVK = true;
+      }
     }
 
-    matchedCount++;
-
-    // Track missing JTL prices
-    if (jtl.ekNettoLieferant === null) missingJtlEkCount++;
-    if (jtl.vkBrutto === null) missingJtlVkCount++;
-
-    // XOR-based comparison: both null=false, one null=true, both present=tolerance check
-    const ekChanged = pricesChanged(jtl.ekNettoLieferant, np.newEK);
-    const vkChanged = pricesChanged(jtl.vkBrutto, np.newVK);
-
-    if (!ekChanged && !vkChanged) {
-      skippedCount++;
-      continue;
-    }
-
-    const vkDiff =
-      np.newVK !== null && jtl.vkBrutto !== null
-        ? roundPrice(np.newVK - jtl.vkBrutto)
-        : null;
-
-    priceChanges.push({
+    rows.push({
       internerSchluessel: jtl.internerSchluessel,
+      identifier: np.sku,
       identifierType,
-      identifierValue: np.sku,
-      oldEK: jtl.ekNettoLieferant,
-      newEK: np.newEK,
-      oldVK: jtl.vkBrutto,
-      newVK: np.newVK,
-      vkDifference: vkDiff,
+      oldEK,
+      newEK,
+      deltaEK,
+      changedEK,
+      oldVK,
+      newVK,
+      deltaVK,
+      changedVK,
+      imZulauf: jtl.imZulauf,
+      bestandGesamt: jtl.bestandGesamt,
+      bestandKG: jtl.bestandKG,
+      bestandNG: jtl.bestandNG,
     });
   }
 
-  // Temporary diagnostics
-  console.log('[compareItems] matchedCount:', matchedCount, 'unmatchedCount:', unmatchedCount, 'priceChanges:', priceChanges.length);
-  if (unmatchedIdentifiers.length > 0) {
-    console.log('[compareItems] first unmatched identifiers:', unmatchedIdentifiers);
+  // Diagnostics
+  console.log('[compareItems] matched:', rows.length, 'unmatched:', unmatchedRows.length);
+  if (unmatchedRows.length > 0) {
+    console.log('[compareItems] first unmatched:', unmatchedRows.slice(0, 5).map(r => r.identifier));
   }
 
-  // Build stock-filtered lists
-  const stockNG: StockNGRow[] = [];
-  const stockKG: StockKGRow[] = [];
-
-  for (const pc of priceChanges) {
-    const key = normalizeKey(pc.identifierValue, identifierType);
-    const jtl = jtlMap.get(key)!;
-    if (jtl.bestandNG > 0) {
-      stockNG.push({ ...pc, bestandNG: jtl.bestandNG });
-    }
-    if (jtl.bestandKG !== null && jtl.bestandKG > 0) {
-      stockKG.push({ ...pc, bestandKG: jtl.bestandKG });
-    }
-  }
-
-  return { priceChanges, stockNG, stockKG, matchedCount, skippedCount, unmatchedCount, invalidRowCount, missingJtlEkCount, missingJtlVkCount, warnings };
+  return {
+    rows,
+    unmatchedRows,
+    matchedCount: rows.length,
+    unmatchedCount: unmatchedRows.length,
+  };
 }
