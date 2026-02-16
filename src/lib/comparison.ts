@@ -6,6 +6,8 @@ export interface ComparisonResult {
   rows: ComparisonResultRow[];
   /** Input rows with no JTL match */
   unmatchedRows: UnmatchedRow[];
+  /** Duplicate identifiers found in JTL (first occurrence kept) */
+  duplicateIdentifiers: string[];
   matchedCount: number;
   unmatchedCount: number;
 }
@@ -69,19 +71,18 @@ export function compareItems(
     }
   }
 
-  // Collect duplicates and throw if any exist
-  const duplicates: string[] = [];
+  // Collect duplicates as warning (do not throw)
+  const duplicateIdentifiers: string[] = [];
   for (const [key, count] of keyCounts) {
     if (count > 1) {
-      duplicates.push(`${key} (${count}×)`);
+      duplicateIdentifiers.push(key);
     }
   }
-  if (duplicates.length > 0) {
-    const shown = duplicates.slice(0, 10).join(', ');
-    const extra = duplicates.length > 10 ? ` und ${duplicates.length - 10} weitere` : '';
-    throw new Error(
-      `Duplikate im JTL Export für ${identifierType}: ${shown}${extra}. ` +
-      `Bitte bereinigen Sie die JTL-Daten vor dem Vergleich.`
+  if (duplicateIdentifiers.length > 0) {
+    console.warn(
+      `[compareItems] Duplikate im JTL Export gefunden. Erste Vorkommen wurden verwendet.`,
+      `totalDuplicates: ${duplicateIdentifiers.length}`,
+      `first 10:`, duplicateIdentifiers.slice(0, 10)
     );
   }
 
@@ -167,6 +168,7 @@ export function compareItems(
   return {
     rows,
     unmatchedRows,
+    duplicateIdentifiers,
     matchedCount: rows.length,
     unmatchedCount: unmatchedRows.length,
   };

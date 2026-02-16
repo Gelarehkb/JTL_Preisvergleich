@@ -74,6 +74,9 @@ const Index = () => {
       const res = compareItems(newPrices, jtlRows, identifierType);
       setResult(res);
       const changedCount = res.rows.filter(r => r.changedEK || r.changedVK).length;
+      if (res.duplicateIdentifiers.length > 0) {
+        toast.warning(`${res.duplicateIdentifiers.length} Duplikate im JTL Export gefunden. Erste Vorkommen wurden verwendet.`);
+      }
       toast.success(`${res.matchedCount} zugeordnet, ${changedCount} Änderungen${res.unmatchedCount > 0 ? `, ${res.unmatchedCount} nicht gefunden` : ''}`);
     } catch (err) {
       toast.error('Fehler beim Vergleich: ' + (err as Error).message);
