@@ -73,10 +73,8 @@ const Index = () => {
       const { rows: jtlRows } = await parseJTL(jtlFile);
       const res = compareItems(newPrices, jtlRows, identifierType);
       setResult(res);
-      if (res.warnings.length > 0) {
-        res.warnings.forEach(w => toast.warning(w.message));
-      }
-      toast.success(`${res.priceChanges.length} Preisänderungen gefunden${res.invalidRowCount > 0 ? ` (${res.invalidRowCount} Zeilen ohne Preise übersprungen)` : ''}`);
+      const changedCount = res.rows.filter(r => r.changedEK || r.changedVK).length;
+      toast.success(`${res.matchedCount} zugeordnet, ${changedCount} Änderungen${res.unmatchedCount > 0 ? `, ${res.unmatchedCount} nicht gefunden` : ''}`);
     } catch (err) {
       toast.error('Fehler beim Vergleich: ' + (err as Error).message);
     } finally {

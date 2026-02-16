@@ -2,9 +2,9 @@ export type IdentifierType = 'HAN' | 'EAN';
 
 export interface NewPriceRow {
   sku: string;
-  /** null = cell was empty, exclude from comparison */
+  /** null = no update provided (not "invalid") */
   newEK: number | null;
-  /** null = cell was empty, exclude from comparison */
+  /** null = no update provided (not "invalid") */
   newVK: number | null;
 }
 
@@ -26,27 +26,28 @@ export interface JTLRow {
   bestandNG: number;
 }
 
-export interface PriceChangeRow {
+/** A single comparison result row — returned for EVERY matched input row */
+export interface ComparisonResultRow {
   internerSchluessel: string;
+  identifier: string;
   identifierType: IdentifierType;
-  identifierValue: string;
   oldEK: number | null;
   newEK: number | null;
+  deltaEK: number | null;
+  changedEK: boolean;
   oldVK: number | null;
   newVK: number | null;
-  vkDifference: number | null;
-}
-
-export interface StockNGRow extends PriceChangeRow {
+  deltaVK: number | null;
+  changedVK: boolean;
+  imZulauf: string;
+  bestandGesamt: number;
+  bestandKG: number | null;
   bestandNG: number;
 }
 
-export interface StockKGRow extends PriceChangeRow {
-  bestandKG: number;
-}
-
-/** Warnings surfaced to the user after comparison */
-export interface ComparisonWarning {
-  type: 'duplicate_key' | 'invalid_row';
-  message: string;
+/** An input row that could not be matched to any JTL row */
+export interface UnmatchedRow {
+  identifier: string;
+  newEK: number | null;
+  newVK: number | null;
 }
