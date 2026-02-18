@@ -168,6 +168,8 @@ export function compareItems(
   const unmatchedJTLRows: UnmatchedJTLRow[] = [];
   for (const [key, jtl] of jtlMap) {
     if (!matchedKeys.has(key)) {
+      // Skip rows with empty internerSchluessel — they are useless placeholders
+      if (!jtl.internerSchluessel) continue;
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
         identifier: key,
