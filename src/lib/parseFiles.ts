@@ -86,7 +86,7 @@ export function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[
       complete: (result) => {
         const headers = result.meta.fields ?? [];
         const rows: JTLRow[] = (result.data as Record<string, unknown>[]).map(r => ({
-          internerSchluessel: String(r['Interner Schlüssel'] ?? '').trim(),
+          internerSchluessel: String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
           artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
           eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
           han: String(r['HAN'] ?? '').trim(),
