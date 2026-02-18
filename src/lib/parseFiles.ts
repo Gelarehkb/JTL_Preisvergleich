@@ -146,7 +146,12 @@ export function getColumnHeaders(file: File): Promise<string[]> {
  * The first column is the identifier, second is EK, third is VK.
  * Column headers are auto-detected from the first row.
  */
-export function parseNewPricesCsv(file: File): Promise<NewPriceRow[]> {
+/**
+ * Parse a new-prices CSV with 2 or 3 columns.
+ * 3 columns: Identifier;EK;VK
+ * 2 columns: Identifier;EK or Identifier;VK (determined by secondColumnType)
+ */
+export function parseNewPricesCsv(file: File, secondColumnType?: 'EK' | 'VK'): Promise<NewPriceRow[]> {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
       header: true,
@@ -154,21 +159,34 @@ export function parseNewPricesCsv(file: File): Promise<NewPriceRow[]> {
       delimiter: ';',
       complete: (result) => {
         const headers = result.meta.fields ?? [];
-        if (headers.length < 3) {
-          reject(new Error(`CSV muss mindestens 3 Spalten haben (gefunden: ${headers.length}). Erwartet: Identifier;Neu EK;Neu VK`));
+        if (headers.length < 2) {
+          reject(new Error(`CSV muss mindestens 2 Spalten haben (gefunden: ${headers.length}).`));
           return;
         }
-        const [skuCol, ekCol, vkCol] = headers;
-        const rows: NewPriceRow[] = (result.data as Record<string, unknown>[])
-          .filter(r => {
-            const sku = String(r[skuCol] ?? '').trim();
-            return sku !== '';
-          })
-          .map(r => ({
-            sku: String(r[skuCol] ?? '').trim(),
-            newEK: parseNumber(r[ekCol]),
-            newVK: parseNumber(r[vkCol]),
-          }));
+        const skuCol = headers[0];
+        const data = result.data as Record<string, unknown>[];
+        let rows: NewPriceRow[];
+
+        if (headers.length === 2) {
+          const valCol = headers[1];
+          rows = data
+            .filter(r => String(r[skuCol] ?? '').trim() !== '')
+            .map(r => ({
+              sku: String(r[skuCol] ?? '').trim(),
+              newEK: secondColumnType === 'EK' ? parseNumber(r[valCol]) : null,
+              newVK: secondColumnType === 'VK' ? parseNumber(r[valCol]) : null,
+            }));
+        } else {
+          const ekCol = headers[1];
+          const vkCol = headers[2];
+          rows = data
+            .filter(r => String(r[skuCol] ?? '').trim() !== '')
+            .map(r => ({
+              sku: String(r[skuCol] ?? '').trim(),
+              newEK: parseNumber(r[ekCol]),
+              newVK: parseNumber(r[vkCol]),
+            }));
+        }
         resolve(rows);
       },
       error: (err) => reject(err),
