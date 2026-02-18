@@ -2,12 +2,13 @@ import { useState, useCallback } from 'react';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { parseJTL, parseNewPricesCsv } from '@/lib/parseFiles';
+import { parseJTL, parseNewPricesCsv, getColumnHeaders } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 /** Returns null for empty strings so empty cells aren't treated as 0 */
 function parseNumber(val: string): number | null {
@@ -34,13 +35,14 @@ const Index = () => {
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
+  const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
+  const [showColumnDialog, setShowColumnDialog] = useState(false);
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
-  /** Import a new-prices CSV into the editable table */
-  const handleNewPriceCsv = useCallback(async (file: File) => {
+  const importCsvRows = useCallback(async (file: File, secondColumnType?: 'EK' | 'VK') => {
     try {
-      const parsed = await parseNewPricesCsv(file);
+      const parsed = await parseNewPricesCsv(file, secondColumnType);
       if (parsed.length === 0) {
         toast.error('Keine gültigen Zeilen in der CSV gefunden');
         return;
@@ -59,6 +61,29 @@ const Index = () => {
       toast.error('CSV Fehler: ' + (err as Error).message);
     }
   }, []);
+
+  /** Import a new-prices CSV into the editable table */
+  const handleNewPriceCsv = useCallback(async (file: File) => {
+    try {
+      const headers = await getColumnHeaders(file);
+      if (headers.length === 2) {
+        setPendingCsvFile(file);
+        setShowColumnDialog(true);
+      } else {
+        await importCsvRows(file);
+      }
+    } catch (err) {
+      toast.error('CSV Fehler: ' + (err as Error).message);
+    }
+  }, [importCsvRows]);
+
+  const handleColumnChoice = useCallback(async (type: 'EK' | 'VK') => {
+    setShowColumnDialog(false);
+    if (pendingCsvFile) {
+      await importCsvRows(pendingCsvFile, type);
+      setPendingCsvFile(null);
+    }
+  }, [pendingCsvFile, importCsvRows]);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
@@ -168,6 +193,22 @@ const Index = () => {
         {/* Results */}
         {result && <ResultsPanel result={result} />}
       </main>
+
+      {/* 2-column CSV dialog */}
+      <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Spalte zuordnen</DialogTitle>
+            <DialogDescription>
+              Die CSV hat nur 2 Spalten. Ist die zweite Spalte EK oder VK?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 pt-2">
+            <Button className="flex-1" onClick={() => handleColumnChoice('EK')}>Neu EK</Button>
+            <Button className="flex-1" variant="outline" onClick={() => handleColumnChoice('VK')}>Neu VK</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
