@@ -96,19 +96,18 @@ export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
 
 
 export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
-  // Only export rows that have a valid internerSchluessel
-  const valid = unmatchedJTLRows.filter(r => r.internerSchluessel);
-  if (valid.length === 0) return;
+  if (unmatchedJTLRows.length === 0) return;
 
   const header = toCsvLine([
-    'interner Schlüssel', 'Bestand KG', 'Bestand NG', 'Im Zulauf', 'DC/OP', 'active',
+    'interner Schlüssel', 'Identifier', 'Bestand KG', 'Bestand NG', 'Im Zulauf', 'DC/OP', 'active',
   ]);
-  const lines = valid.map(r => {
+  const lines = unmatchedJTLRows.map(r => {
     const imZulaufNum = parseInt(r.imZulauf, 10) || 0;
     const bestandKG = r.bestandKG ?? 0;
     const dcOp = (bestandKG > 0 || r.bestandNG > 0 || imZulaufNum > 0 || r.bestandGesamt > 0) ? 'OP' : 'DC';
     return toCsvLine([
       r.internerSchluessel,
+      r.identifier,
       r.bestandKG !== null ? String(r.bestandKG) : '',
       String(r.bestandNG),
       r.imZulauf,

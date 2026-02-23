@@ -168,8 +168,8 @@ export function compareItems(
   const unmatchedJTLRows: UnmatchedJTLRow[] = [];
   for (const [key, jtl] of jtlMap) {
     if (!matchedKeys.has(key)) {
-      // Skip rows with empty internerSchluessel — they are useless placeholders
-      if (!jtl.internerSchluessel) continue;
+      // Include all unmatched JTL rows — even if internerSchluessel is empty
+      // The identifier (EAN/HAN) is always available as the map key
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
         identifier: key,
