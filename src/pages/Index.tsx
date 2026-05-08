@@ -2,13 +2,22 @@ import { useState, useCallback } from 'react';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { parseJTL, parseNewPricesCsv, getColumnHeaders } from '@/lib/parseFiles';
+import { ColumnMapper } from '@/components/ColumnMapper';
+import { parseJTL, parseNewPrices, getColumnHeaders } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+
+function guessColumn(headers: string[], patterns: RegExp[]): string {
+  for (const p of patterns) {
+    const hit = headers.find(h => p.test(h));
+    if (hit) return hit;
+  }
+  return '';
+}
 
 /** Returns null for empty strings so empty cells aren't treated as 0 */
 function parseNumber(val: string): number | null {
