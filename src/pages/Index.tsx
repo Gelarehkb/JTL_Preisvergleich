@@ -3,7 +3,8 @@ import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
 import { ColumnMapper } from '@/components/ColumnMapper';
-import { parseJTL, parseNewPrices, getColumnHeaders } from '@/lib/parseFiles';
+import { PreviewTable } from '@/components/PreviewTable';
+import { parseJTL, parseNewPrices, getPreviewData, type PreviewData } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ const Index = () => {
   const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
   const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
   const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
+  const [pendingPreview, setPendingPreview] = useState<PreviewData | null>(null);
   const [mapSku, setMapSku] = useState('');
   const [mapEk, setMapEk] = useState('');
   const [mapVk, setMapVk] = useState('');
@@ -78,7 +80,8 @@ const Index = () => {
   /** Open column-mapping dialog whenever a price-list CSV is uploaded */
   const handleNewPriceCsv = useCallback(async (file: File) => {
     try {
-      const headers = await getColumnHeaders(file);
+      const preview = await getPreviewData(file, 20);
+      const headers = preview.headers;
       if (headers.length < 1) {
         toast.error('CSV enthält keine Spalten');
         return;
@@ -88,6 +91,7 @@ const Index = () => {
         : [/\bhan\b/i, /hersteller.*nummer/i, /mpn/i, /art.*nr/i, /sku/i];
       setPendingCsvFile(file);
       setPendingHeaders(headers);
+      setPendingPreview(preview);
       setMapSku(guessColumn(headers, idPatterns) || headers[0]);
       setMapEk(guessColumn(headers, [/^ek/i, /einkauf/i, /\bek\b/i]));
       setMapVk(guessColumn(headers, [/^vk/i, /verkauf/i, /\bvk\b/i, /preis/i]));
@@ -218,12 +222,17 @@ const Index = () => {
       </main>
 
       {/* Column mapping dialog */}
-      <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); } }}>
-        <DialogContent className="sm:max-w-2xl">
+      <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); setPendingPreview(null); } }}>
+        <DialogContent className="max-w-[min(96vw,1100px)] sm:max-w-[min(96vw,1100px)]">
           <DialogHeader>
             <DialogTitle>Spalten zuordnen</DialogTitle>
             <DialogDescription>
               Wähle aus, welche Spalte den Identifier ({identifierType}), den neuen EK und den neuen VK enthält.
+              {pendingPreview && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (Trennzeichen: <code>{pendingPreview.delimiter === '\t' ? '\\t' : pendingPreview.delimiter}</code>, Dezimal: <code>{pendingPreview.decimal}</code>)
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <ColumnMapper
@@ -236,8 +245,16 @@ const Index = () => {
             onVkChange={setMapVk}
             identifierLabel={identifierType === 'EAN' ? 'EAN / Barcode' : 'HAN'}
           />
+          {pendingPreview && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Vorschau (erste {pendingPreview.rows.length} Zeilen) — Spalten lassen sich am rechten Rand ziehen
+              </p>
+              <PreviewTable headers={pendingPreview.headers} rows={pendingPreview.rows} />
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowColumnDialog(false); setPendingCsvFile(null); }}>Abbrechen</Button>
+            <Button variant="outline" onClick={() => { setShowColumnDialog(false); setPendingCsvFile(null); setPendingPreview(null); }}>Abbrechen</Button>
             <Button onClick={handleConfirmMapping} disabled={!mapSku || (!mapEk && !mapVk)}>Übernehmen</Button>
           </DialogFooter>
         </DialogContent>
