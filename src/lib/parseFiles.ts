@@ -31,7 +31,9 @@ function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknow
   return undefined;
 }
 
-export function parseNewPrices(file: File, skuColumn: string, ekColumn: string, vkColumn: string): Promise<NewPriceRow[]> {
+export function parseNewPrices(file: File, skuColumn: string, ekColumn: string | '', vkColumn: string | ''): Promise<NewPriceRow[]> {
+  const readEK = (r: Record<string, unknown>) => (ekColumn ? parseNumber(r[ekColumn]) : null);
+  const readVK = (r: Record<string, unknown>) => (vkColumn ? parseNumber(r[vkColumn]) : null);
   return new Promise((resolve, reject) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
 
