@@ -2,13 +2,22 @@ import { useState, useCallback } from 'react';
 import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
-import { parseJTL, parseNewPricesCsv, getColumnHeaders } from '@/lib/parseFiles';
+import { ColumnMapper } from '@/components/ColumnMapper';
+import { parseJTL, parseNewPrices, getColumnHeaders } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import type { IdentifierType, NewPriceRow } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+
+function guessColumn(headers: string[], patterns: RegExp[]): string {
+  for (const p of patterns) {
+    const hit = headers.find(h => p.test(h));
+    if (hit) return hit;
+  }
+  return '';
+}
 
 /** Returns null for empty strings so empty cells aren't treated as 0 */
 function parseNumber(val: string): number | null {
@@ -36,13 +45,17 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
   const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
+  const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
+  const [mapSku, setMapSku] = useState('');
+  const [mapEk, setMapEk] = useState('');
+  const [mapVk, setMapVk] = useState('');
   const [showColumnDialog, setShowColumnDialog] = useState(false);
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
-  const importCsvRows = useCallback(async (file: File, secondColumnType?: 'EK' | 'VK') => {
+  const importCsvRows = useCallback(async (file: File, sku: string, ek: string, vk: string) => {
     try {
-      const parsed = await parseNewPricesCsv(file, secondColumnType);
+      const parsed = await parseNewPrices(file, sku, ek, vk);
       if (parsed.length === 0) {
         toast.error('Keine gültigen Zeilen in der CSV gefunden');
         return;
@@ -62,28 +75,38 @@ const Index = () => {
     }
   }, []);
 
-  /** Import a new-prices CSV into the editable table */
+  /** Open column-mapping dialog whenever a price-list CSV is uploaded */
   const handleNewPriceCsv = useCallback(async (file: File) => {
     try {
       const headers = await getColumnHeaders(file);
-      if (headers.length === 2) {
-        setPendingCsvFile(file);
-        setShowColumnDialog(true);
-      } else {
-        await importCsvRows(file);
+      if (headers.length < 1) {
+        toast.error('CSV enthält keine Spalten');
+        return;
       }
+      const idPatterns = identifierType === 'EAN'
+        ? [/ean/i, /barcode/i, /gtin/i]
+        : [/\bhan\b/i, /hersteller.*nummer/i, /mpn/i, /art.*nr/i, /sku/i];
+      setPendingCsvFile(file);
+      setPendingHeaders(headers);
+      setMapSku(guessColumn(headers, idPatterns) || headers[0]);
+      setMapEk(guessColumn(headers, [/^ek/i, /einkauf/i, /\bek\b/i]));
+      setMapVk(guessColumn(headers, [/^vk/i, /verkauf/i, /\bvk\b/i, /preis/i]));
+      setShowColumnDialog(true);
     } catch (err) {
       toast.error('CSV Fehler: ' + (err as Error).message);
     }
-  }, [importCsvRows]);
+  }, [identifierType]);
 
-  const handleColumnChoice = useCallback(async (type: 'EK' | 'VK') => {
-    setShowColumnDialog(false);
-    if (pendingCsvFile) {
-      await importCsvRows(pendingCsvFile, type);
-      setPendingCsvFile(null);
+  const handleConfirmMapping = useCallback(async () => {
+    if (!pendingCsvFile || !mapSku) return;
+    if (!mapEk && !mapVk) {
+      toast.error('Bitte mindestens EK oder VK Spalte zuordnen');
+      return;
     }
-  }, [pendingCsvFile, importCsvRows]);
+    setShowColumnDialog(false);
+    await importCsvRows(pendingCsvFile, mapSku, mapEk, mapVk);
+    setPendingCsvFile(null);
+  }, [pendingCsvFile, mapSku, mapEk, mapVk, importCsvRows]);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
@@ -194,19 +217,29 @@ const Index = () => {
         {result && <ResultsPanel result={result} />}
       </main>
 
-      {/* 2-column CSV dialog */}
+      {/* Column mapping dialog */}
       <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); } }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Spalte zuordnen</DialogTitle>
+            <DialogTitle>Spalten zuordnen</DialogTitle>
             <DialogDescription>
-              Die CSV hat nur 2 Spalten. Ist die zweite Spalte EK oder VK?
+              Wähle aus, welche Spalte den Identifier ({identifierType}), den neuen EK und den neuen VK enthält.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3 pt-2">
-            <Button className="flex-1" onClick={() => handleColumnChoice('EK')}>Neu EK</Button>
-            <Button className="flex-1" variant="outline" onClick={() => handleColumnChoice('VK')}>Neu VK</Button>
-          </div>
+          <ColumnMapper
+            headers={pendingHeaders}
+            skuColumn={mapSku}
+            ekColumn={mapEk}
+            vkColumn={mapVk}
+            onSkuChange={setMapSku}
+            onEkChange={setMapEk}
+            onVkChange={setMapVk}
+            identifierLabel={identifierType === 'EAN' ? 'EAN / Barcode' : 'HAN'}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowColumnDialog(false); setPendingCsvFile(null); }}>Abbrechen</Button>
+            <Button onClick={handleConfirmMapping} disabled={!mapSku || (!mapEk && !mapVk)}>Übernehmen</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
