@@ -45,13 +45,17 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
   const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
+  const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
+  const [mapSku, setMapSku] = useState('');
+  const [mapEk, setMapEk] = useState('');
+  const [mapVk, setMapVk] = useState('');
   const [showColumnDialog, setShowColumnDialog] = useState(false);
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
-  const importCsvRows = useCallback(async (file: File, secondColumnType?: 'EK' | 'VK') => {
+  const importCsvRows = useCallback(async (file: File, sku: string, ek: string, vk: string) => {
     try {
-      const parsed = await parseNewPricesCsv(file, secondColumnType);
+      const parsed = await parseNewPrices(file, sku, ek, vk);
       if (parsed.length === 0) {
         toast.error('Keine gültigen Zeilen in der CSV gefunden');
         return;
@@ -71,28 +75,38 @@ const Index = () => {
     }
   }, []);
 
-  /** Import a new-prices CSV into the editable table */
+  /** Open column-mapping dialog whenever a price-list CSV is uploaded */
   const handleNewPriceCsv = useCallback(async (file: File) => {
     try {
       const headers = await getColumnHeaders(file);
-      if (headers.length === 2) {
-        setPendingCsvFile(file);
-        setShowColumnDialog(true);
-      } else {
-        await importCsvRows(file);
+      if (headers.length < 1) {
+        toast.error('CSV enthält keine Spalten');
+        return;
       }
+      const idPatterns = identifierType === 'EAN'
+        ? [/ean/i, /barcode/i, /gtin/i]
+        : [/\bhan\b/i, /hersteller.*nummer/i, /mpn/i, /art.*nr/i, /sku/i];
+      setPendingCsvFile(file);
+      setPendingHeaders(headers);
+      setMapSku(guessColumn(headers, idPatterns) || headers[0]);
+      setMapEk(guessColumn(headers, [/^ek/i, /einkauf/i, /\bek\b/i]));
+      setMapVk(guessColumn(headers, [/^vk/i, /verkauf/i, /\bvk\b/i, /preis/i]));
+      setShowColumnDialog(true);
     } catch (err) {
       toast.error('CSV Fehler: ' + (err as Error).message);
     }
-  }, [importCsvRows]);
+  }, [identifierType]);
 
-  const handleColumnChoice = useCallback(async (type: 'EK' | 'VK') => {
-    setShowColumnDialog(false);
-    if (pendingCsvFile) {
-      await importCsvRows(pendingCsvFile, type);
-      setPendingCsvFile(null);
+  const handleConfirmMapping = useCallback(async () => {
+    if (!pendingCsvFile || !mapSku) return;
+    if (!mapEk && !mapVk) {
+      toast.error('Bitte mindestens EK oder VK Spalte zuordnen');
+      return;
     }
-  }, [pendingCsvFile, importCsvRows]);
+    setShowColumnDialog(false);
+    await importCsvRows(pendingCsvFile, mapSku, mapEk, mapVk);
+    setPendingCsvFile(null);
+  }, [pendingCsvFile, mapSku, mapEk, mapVk, importCsvRows]);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
