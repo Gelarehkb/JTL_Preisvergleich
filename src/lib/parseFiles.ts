@@ -49,10 +49,9 @@ export function parseNewPrices(file: File, skuColumn: string, ekColumn: string |
             .filter(r => r[skuColumn] !== undefined && r[skuColumn] !== '')
             .map(r => ({
               sku: String(r[skuColumn] ?? '').trim(),
-              newEK: parseNumber(r[ekColumn]),
-              newVK: parseNumber(r[vkColumn]),
+              newEK: readEK(r),
+              newVK: readVK(r),
             }));
-          resolve(result);
         } catch (err) {
           reject(err);
         }
