@@ -42,7 +42,7 @@ export function ColumnMapper({
               </SelectTrigger>
               <SelectContent>
                 {f.allowNone && <SelectItem value={NONE_VALUE} className="text-xs italic">— keine —</SelectItem>}
-                {headers.map(h => (
+                {headers.filter(h => h && h.trim() !== '').map(h => (
                   <SelectItem key={h} value={h} className="text-xs">{h}</SelectItem>
                 ))}
               </SelectContent>
