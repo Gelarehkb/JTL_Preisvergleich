@@ -2,28 +2,65 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import type { NewPriceRow, JTLRow } from './types';
 
-/**
- * Parse a numeric value. Returns null if the cell is empty/missing,
- * so empty prices are never silently converted to 0.
- */
-function parseNumber(val: unknown): number | null {
+/* ============================================================
+ * Auto-detection: separator (; , \t |) and decimal mark (, .)
+ * ============================================================ */
+
+async function readSample(file: File, bytes = 16384): Promise<string> {
+  return await file.slice(0, bytes).text();
+}
+
+export function detectDelimiter(sample: string): string {
+  const lines = sample.split(/\r?\n/).filter(l => l.trim()).slice(0, 10);
+  if (!lines.length) return ';';
+  const candidates = [';', '\t', '|', ','];
+  let best = ';';
+  let bestScore = -1;
+  for (const d of candidates) {
+    const counts = lines.map(l => l.split(d).length - 1);
+    const min = Math.min(...counts);
+    const avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+    // require at least one occurrence in every line + consistency
+    if (min >= 1 && avg > bestScore) {
+      bestScore = avg;
+      best = d;
+    }
+  }
+  return best;
+}
+
+export function detectDecimal(sample: string, delimiter: string): '.' | ',' {
+  // If field separator is comma, decimal must be a dot.
+  if (delimiter === ',') return '.';
+  const commaDecimal = (sample.match(/\d,\d{1,3}(?!\d)/g) || []).length;
+  const dotDecimal = (sample.match(/\d\.\d{1,3}(?!\d)/g) || []).length;
+  return commaDecimal >= dotDecimal ? ',' : '.';
+}
+
+/** Parse a number using a known decimal mark; the other char is treated as thousands sep. */
+export function parseNumberSmart(val: unknown, decimal: '.' | ','): number | null {
   if (val === null || val === undefined || val === '') return null;
   if (typeof val === 'number') return val;
-  const str = String(val).replace(/\s/g, '').replace(',', '.');
-  if (str === '') return null;
-  const num = parseFloat(str);
-  return isNaN(num) ? null : num;
+  let s = String(val).trim().replace(/\s/g, '');
+  if (!s) return null;
+  if (decimal === ',') {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else {
+    s = s.replace(/,/g, '');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
 }
 
-/** Always returns a number (defaults to 0 for stock/quantity fields) */
-function parseNumberOrZero(val: unknown): number {
-  return parseNumber(val) ?? 0;
+/** Backwards-compatible parseNumber: assumes German style (',' decimal). */
+function parseNumber(val: unknown): number | null {
+  return parseNumberSmart(val, ',');
 }
 
-/**
- * Resolve a column value with fallback names.
- * Tries each name in order and returns the first non-undefined value.
- */
+function parseNumberOrZero(val: unknown, decimal: '.' | ',' = ','): number {
+  return parseNumberSmart(val, decimal) ?? 0;
+}
+
 function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
     if (row[name] !== undefined) return row[name];
@@ -31,128 +68,117 @@ function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknow
   return undefined;
 }
 
-export function parseNewPrices(file: File, skuColumn: string, ekColumn: string | '', vkColumn: string | ''): Promise<NewPriceRow[]> {
-  const readEK = (r: Record<string, unknown>) => (ekColumn ? parseNumber(r[ekColumn]) : null);
-  const readVK = (r: Record<string, unknown>) => (vkColumn ? parseNumber(r[vkColumn]) : null);
-  return new Promise((resolve, reject) => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
+/* ============================================================
+ * Generic CSV/XLSX read with auto-detection
+ * ============================================================ */
 
-    if (ext === 'xlsx' || ext === 'xls') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target!.result as ArrayBuffer);
-          const wb = XLSX.read(data, { type: 'array' });
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-          const result: NewPriceRow[] = rows
-            .filter(r => r[skuColumn] !== undefined && r[skuColumn] !== '')
-            .map(r => ({
-              sku: String(r[skuColumn] ?? '').trim(),
-              newEK: readEK(r),
-              newVK: readVK(r),
-            }));
-          resolve(result);
-        } catch (err) {
-          reject(err);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        delimiter: ';',
-        complete: (result) => {
-          const rows: NewPriceRow[] = (result.data as Record<string, unknown>[])
-            .filter(r => r[skuColumn] !== undefined && r[skuColumn] !== '')
-            .map(r => ({
-              sku: String(r[skuColumn] ?? '').trim(),
-              newEK: readEK(r),
-              newVK: readVK(r),
-            }));
-          resolve(rows);
-        },
-        error: (err) => reject(err),
-      });
-    }
-  });
+interface RawTable {
+  headers: string[];
+  rows: Record<string, unknown>[];
+  delimiter: string;
+  decimal: '.' | ',';
 }
 
-export function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[] }> {
-  return new Promise((resolve, reject) => {
+async function readTable(file: File): Promise<RawTable> {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext === 'xlsx' || ext === 'xls') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+    const headers = rows.length ? Object.keys(rows[0]) : [];
+    // XLSX gives real numbers already; decimal irrelevant
+    return { headers, rows, delimiter: ';', decimal: '.' };
+  }
+  const sample = await readSample(file);
+  const delimiter = detectDelimiter(sample);
+  const decimal = detectDecimal(sample, delimiter);
+  return await new Promise<RawTable>((resolve, reject) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      delimiter: ';',
+      delimiter,
       complete: (result) => {
-        const headers = result.meta.fields ?? [];
-        const rows: JTLRow[] = (result.data as Record<string, unknown>[]).map(r => ({
-          internerSchluessel: String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
-          artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
-          eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
-          han: String(r['HAN'] ?? '').trim(),
-          artikelname: String(r['Artikelname'] ?? '').trim(),
-          ekNettoLieferant: parseNumber(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
-          vkBrutto: parseNumber(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
-          warengruppe: String(r['Warengruppe'] ?? '').trim(),
-          hersteller: String(r['Hersteller'] ?? '').trim(),
-          imZulauf: String(r['Im Zulauf'] ?? '').trim(),
-          bestandGesamt: parseNumberOrZero(r['Bestand Gesamt']),
-          bestandKG: r['Bestand KG'] !== undefined && r['Bestand KG'] !== '' ? parseNumberOrZero(r['Bestand KG']) : null,
-          bestandNG: parseNumberOrZero(r['Bestand NG']),
-        }));
-        resolve({ rows, headers });
+        resolve({
+          headers: result.meta.fields ?? [],
+          rows: result.data as Record<string, unknown>[],
+          delimiter,
+          decimal,
+        });
       },
       error: (err) => reject(err),
     });
   });
 }
 
-export function getColumnHeaders(file: File): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const ext = file.name.split('.').pop()?.toLowerCase();
+/* ============================================================
+ * Public API
+ * ============================================================ */
 
-    if (ext === 'xlsx' || ext === 'xls') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target!.result as ArrayBuffer);
-          const wb = XLSX.read(data, { type: 'array' });
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1 });
-          const headers = (rows[0] as unknown as string[]) ?? [];
-          resolve(headers.map(String));
-        } catch (err) {
-          reject(err);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      Papa.parse(file, {
-        header: true,
-        preview: 1,
-        delimiter: ';',
-        complete: (result) => {
-          resolve(result.meta.fields ?? []);
-        },
-        error: (err) => reject(err),
-      });
-    }
-  });
+export async function parseNewPrices(
+  file: File,
+  skuColumn: string,
+  ekColumn: string | '',
+  vkColumn: string | ''
+): Promise<NewPriceRow[]> {
+  const { rows, decimal } = await readTable(file);
+  const readEK = (r: Record<string, unknown>) => (ekColumn ? parseNumberSmart(r[ekColumn], decimal) : null);
+  const readVK = (r: Record<string, unknown>) => (vkColumn ? parseNumberSmart(r[vkColumn], decimal) : null);
+  return rows
+    .filter(r => r[skuColumn] !== undefined && r[skuColumn] !== '')
+    .map(r => ({
+      sku: String(r[skuColumn] ?? '').trim(),
+      newEK: readEK(r),
+      newVK: readVK(r),
+    }));
 }
 
-/**
- * Parse a simple new-prices CSV with exactly 3 columns.
- * Uses semicolon delimiter and the same parseNumber logic (null for empty).
- * The first column is the identifier, second is EK, third is VK.
- * Column headers are auto-detected from the first row.
- */
-/**
- * Parse a new-prices CSV with 2 or 3 columns.
- * 3 columns: Identifier;EK;VK
- * 2 columns: Identifier;EK or Identifier;VK (determined by secondColumnType)
- */
+export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[] }> {
+  const { rows, headers, decimal } = await readTable(file);
+  const num = (v: unknown) => parseNumberSmart(v, decimal);
+  const numZero = (v: unknown) => num(v) ?? 0;
+  const jtlRows: JTLRow[] = rows.map(r => ({
+    internerSchluessel: String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
+    artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
+    eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
+    han: String(r['HAN'] ?? '').trim(),
+    artikelname: String(r['Artikelname'] ?? '').trim(),
+    ekNettoLieferant: num(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
+    vkBrutto: num(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
+    warengruppe: String(r['Warengruppe'] ?? '').trim(),
+    hersteller: String(r['Hersteller'] ?? '').trim(),
+    imZulauf: String(r['Im Zulauf'] ?? '').trim(),
+    bestandGesamt: numZero(r['Bestand Gesamt']),
+    bestandKG: r['Bestand KG'] !== undefined && r['Bestand KG'] !== '' ? numZero(r['Bestand KG']) : null,
+    bestandNG: numZero(r['Bestand NG']),
+  }));
+  return { rows: jtlRows, headers };
+}
+
+export async function getColumnHeaders(file: File): Promise<string[]> {
+  const { headers } = await readTable(file);
+  return headers;
+}
+
+/** Preview first N rows (with auto-detected separator). */
+export interface PreviewData {
+  headers: string[];
+  rows: Record<string, string>[];
+  delimiter: string;
+  decimal: '.' | ',';
+}
+
+export async function getPreviewData(file: File, n = 20): Promise<PreviewData> {
+  const { headers, rows, delimiter, decimal } = await readTable(file);
+  const slice = rows.slice(0, n).map(r => {
+    const out: Record<string, string> = {};
+    for (const h of headers) out[h] = r[h] === undefined || r[h] === null ? '' : String(r[h]);
+    return out;
+  });
+  return { headers, rows: slice, delimiter, decimal };
+}
+
+/** Legacy 2/3-column CSV parser kept for compatibility. */
 export function parseNewPricesCsv(file: File, secondColumnType?: 'EK' | 'VK'): Promise<NewPriceRow[]> {
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
@@ -168,7 +194,6 @@ export function parseNewPricesCsv(file: File, secondColumnType?: 'EK' | 'VK'): P
         const skuCol = headers[0];
         const data = result.data as Record<string, unknown>[];
         let rows: NewPriceRow[];
-
         if (headers.length === 2) {
           const valCol = headers[1];
           rows = data
