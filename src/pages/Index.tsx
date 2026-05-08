@@ -217,19 +217,29 @@ const Index = () => {
         {result && <ResultsPanel result={result} />}
       </main>
 
-      {/* 2-column CSV dialog */}
+      {/* Column mapping dialog */}
       <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); } }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Spalte zuordnen</DialogTitle>
+            <DialogTitle>Spalten zuordnen</DialogTitle>
             <DialogDescription>
-              Die CSV hat nur 2 Spalten. Ist die zweite Spalte EK oder VK?
+              Wähle aus, welche Spalte den Identifier ({identifierType}), den neuen EK und den neuen VK enthält.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-3 pt-2">
-            <Button className="flex-1" onClick={() => handleColumnChoice('EK')}>Neu EK</Button>
-            <Button className="flex-1" variant="outline" onClick={() => handleColumnChoice('VK')}>Neu VK</Button>
-          </div>
+          <ColumnMapper
+            headers={pendingHeaders}
+            skuColumn={mapSku}
+            ekColumn={mapEk}
+            vkColumn={mapVk}
+            onSkuChange={setMapSku}
+            onEkChange={setMapEk}
+            onVkChange={setMapVk}
+            identifierLabel={identifierType === 'EAN' ? 'EAN / Barcode' : 'HAN'}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowColumnDialog(false); setPendingCsvFile(null); }}>Abbrechen</Button>
+            <Button onClick={handleConfirmMapping} disabled={!mapSku || (!mapEk && !mapVk)}>Übernehmen</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
