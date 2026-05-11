@@ -65,15 +65,17 @@ export function PreviewTable({
 
   if (!headers.length) return null;
 
+  const equalPct = `${100 / headers.length}%`;
+
   return (
     <div
-      className="overflow-auto rounded-md border bg-card"
+      className="overflow-y-auto overflow-x-hidden rounded-md border bg-card"
       style={{ maxHeight }}
     >
-      <table className="border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
+      <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           {headers.map((h, i) => (
-            <col key={h + i} style={{ width: widths[i] ?? defaultColumnWidth }} />
+            <col key={h + i} style={{ width: equalPct }} />
           ))}
         </colgroup>
         <thead className="sticky top-0 z-10 bg-muted">
@@ -81,14 +83,10 @@ export function PreviewTable({
             {headers.map((h, i) => (
               <th
                 key={h + i}
-                className="relative truncate border-b border-r px-2 py-1.5 text-left font-medium text-foreground"
+                className="overflow-hidden border-b border-r px-2 py-1.5 text-left font-medium text-foreground"
                 title={h}
               >
                 <span className="block truncate">{h || <span className="text-muted-foreground italic">(leer)</span>}</span>
-                <span
-                  onMouseDown={startDrag(i)}
-                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-primary/40"
-                />
               </th>
             ))}
           </tr>
@@ -99,10 +97,10 @@ export function PreviewTable({
               {headers.map((h, ci) => (
                 <td
                   key={h + ci}
-                  className="truncate border-b border-r px-2 py-1 text-foreground"
+                  className="overflow-hidden border-b border-r px-2 py-1 text-foreground"
                   title={row[h]}
                 >
-                  {row[h]}
+                  <span className="block truncate">{row[h]}</span>
                 </td>
               ))}
             </tr>
