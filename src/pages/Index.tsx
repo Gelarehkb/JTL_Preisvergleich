@@ -223,7 +223,7 @@ const Index = () => {
 
       {/* Column mapping dialog */}
       <Dialog open={showColumnDialog} onOpenChange={(open) => { if (!open) { setShowColumnDialog(false); setPendingCsvFile(null); setPendingPreview(null); } }}>
-        <DialogContent className="max-w-[min(96vw,1100px)] sm:max-w-[min(96vw,1100px)]">
+        <DialogContent className="max-w-[min(96vw,1100px)] sm:max-w-[min(96vw,1100px)] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Spalten zuordnen</DialogTitle>
             <DialogDescription>
