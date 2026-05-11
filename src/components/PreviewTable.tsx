@@ -97,10 +97,10 @@ export function PreviewTable({
               {headers.map((h, ci) => (
                 <td
                   key={h + ci}
-                  className="truncate border-b border-r px-2 py-1 text-foreground"
+                  className="overflow-hidden border-b border-r px-2 py-1 text-foreground"
                   title={row[h]}
                 >
-                  {row[h]}
+                  <span className="block truncate">{row[h]}</span>
                 </td>
               ))}
             </tr>
