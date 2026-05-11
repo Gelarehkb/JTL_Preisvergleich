@@ -83,14 +83,10 @@ export function PreviewTable({
             {headers.map((h, i) => (
               <th
                 key={h + i}
-                className="relative truncate border-b border-r px-2 py-1.5 text-left font-medium text-foreground"
+                className="overflow-hidden border-b border-r px-2 py-1.5 text-left font-medium text-foreground"
                 title={h}
               >
                 <span className="block truncate">{h || <span className="text-muted-foreground italic">(leer)</span>}</span>
-                <span
-                  onMouseDown={startDrag(i)}
-                  className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-primary/40"
-                />
               </th>
             ))}
           </tr>
