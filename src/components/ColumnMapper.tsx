@@ -32,12 +32,12 @@ export function ColumnMapper({
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3">
       <p className="text-sm font-semibold text-foreground">Spaltenzuordnung</p>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
         {fields.map(f => (
-          <div key={f.label}>
+          <div key={f.label} className="min-w-0">
             <label className="mb-1 block text-xs text-muted-foreground">{f.label}</label>
             <Select value={f.value || (f.allowNone ? NONE_VALUE : '')} onValueChange={(v) => f.onChange(v === NONE_VALUE ? '' : v)}>
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-9 w-full min-w-0 text-xs [&>span]:truncate [&>span]:block [&>span]:min-w-0">
                 <SelectValue placeholder="Spalte wählen" />
               </SelectTrigger>
               <SelectContent>
