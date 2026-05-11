@@ -65,15 +65,17 @@ export function PreviewTable({
 
   if (!headers.length) return null;
 
+  const equalPct = `${100 / headers.length}%`;
+
   return (
     <div
-      className="overflow-auto rounded-md border bg-card"
+      className="overflow-y-auto overflow-x-hidden rounded-md border bg-card"
       style={{ maxHeight }}
     >
-      <table className="border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
+      <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
         <colgroup>
           {headers.map((h, i) => (
-            <col key={h + i} style={{ width: widths[i] ?? defaultColumnWidth }} />
+            <col key={h + i} style={{ width: equalPct }} />
           ))}
         </colgroup>
         <thead className="sticky top-0 z-10 bg-muted">
