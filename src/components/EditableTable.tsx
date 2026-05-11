@@ -381,7 +381,6 @@ export function EditableTable({ identifierType, rows, onChange }: EditableTableP
           </div>
         )}
       </div>
-      </div>
 
       <p className="text-xs text-muted-foreground">
         💡 Tipp: Daten aus Excel/Google Sheets direkt einfügen (Strg+V). Tab zum Navigieren, Enter für nächste Zeile.
