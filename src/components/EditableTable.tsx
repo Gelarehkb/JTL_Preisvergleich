@@ -261,6 +261,9 @@ export function EditableTable({ identifierType, rows, onChange }: EditableTableP
   }, [activeCell, selectedRows, rows, colKeys]);
 
   const filledRows = rows.filter(r => r.identifier.trim() !== '').length;
+  const PREVIEW_LIMIT = 10;
+  const previewRows = rows.slice(0, PREVIEW_LIMIT);
+  const hiddenCount = rows.length - PREVIEW_LIMIT;
 
   return (
     <div className="space-y-3">
@@ -309,7 +312,7 @@ export function EditableTable({ identifierType, rows, onChange }: EditableTableP
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, ri) => {
+            {previewRows.map((row, ri) => {
               const isSelected = selectedRows.has(ri);
               return (
                 <tr
@@ -372,6 +375,11 @@ export function EditableTable({ identifierType, rows, onChange }: EditableTableP
             })}
           </tbody>
         </table>
+        {hiddenCount > 0 && (
+          <div className="px-3 py-2 text-xs text-center text-muted-foreground border-t bg-muted/20">
+            … {hiddenCount} weitere Zeile{hiddenCount > 1 ? 'n' : ''} ausgeblendet ({rows.length} gesamt)
+          </div>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">
