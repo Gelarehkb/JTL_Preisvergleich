@@ -261,6 +261,9 @@ export function EditableTable({ identifierType, rows, onChange }: EditableTableP
   }, [activeCell, selectedRows, rows, colKeys]);
 
   const filledRows = rows.filter(r => r.identifier.trim() !== '').length;
+  const PREVIEW_LIMIT = 10;
+  const previewRows = rows.slice(0, PREVIEW_LIMIT);
+  const hiddenCount = rows.length - PREVIEW_LIMIT;
 
   return (
     <div className="space-y-3">
