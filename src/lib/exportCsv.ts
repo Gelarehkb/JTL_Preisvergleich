@@ -20,21 +20,30 @@ function downloadCsv(content: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export function exportAllRows(rows: ComparisonResultRow[]) {
-  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
-  const header = toCsvLine([
-    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
+function fullHeader(idLabel: string): string[] {
+  return [
+    'Interner Schlüssel', idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
     'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
     'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
-  ]);
-  const lines = rows.map(r => toCsvLine([
+  ];
+}
+
+function fullRow(r: ComparisonResultRow): string[] {
+  return [
+    r.internerSchluessel,
     r.identifier,
     formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK), r.changedEK ? 'Ja' : 'Nein',
     formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK), r.changedVK ? 'Ja' : 'Nein',
     r.imZulauf, String(r.bestandGesamt),
     r.bestandKG !== null ? String(r.bestandKG) : '',
     String(r.bestandNG),
-  ]));
+  ];
+}
+
+export function exportAllRows(rows: ComparisonResultRow[]) {
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
+  const header = toCsvLine(fullHeader(idLabel));
+  const lines = rows.map(r => toCsvLine(fullRow(r)));
   downloadCsv([header, ...lines].join('\n'), 'vergleich_alle.csv');
 }
 
@@ -42,10 +51,11 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
   const changed = rows.filter(r => r.changedEK || r.changedVK);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
   const header = toCsvLine([
-    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz',
+    'Interner Schlüssel', idLabel, 'OLD EK', 'NEW EK', 'EK Differenz',
     'OLD VK', 'NEW VK', 'VK Differenz',
   ]);
   const lines = changed.map(r => toCsvLine([
+    r.internerSchluessel,
     r.identifier,
     formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK),
     formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK),
@@ -59,38 +69,16 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
 export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
   const filtered = rows.filter(r => r.bestandNG > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
-  const header = toCsvLine([
-    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
-    'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
-    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
-  ]);
-  const lines = filtered.map(r => toCsvLine([
-    r.identifier,
-    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK), r.changedEK ? 'Ja' : 'Nein',
-    formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK), r.changedVK ? 'Ja' : 'Nein',
-    r.imZulauf, String(r.bestandGesamt),
-    r.bestandKG !== null ? String(r.bestandKG) : '',
-    String(r.bestandNG),
-  ]));
+  const header = toCsvLine(fullHeader(idLabel));
+  const lines = filtered.map(r => toCsvLine(fullRow(r)));
   downloadCsv([header, ...lines].join('\n'), 'export_bestand_ng_gt_0.csv');
 }
 
 export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
   const filtered = rows.filter(r => r.bestandKG !== null && r.bestandKG > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
-  const header = toCsvLine([
-    idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
-    'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
-    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
-  ]);
-  const lines = filtered.map(r => toCsvLine([
-    r.identifier,
-    formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK), r.changedEK ? 'Ja' : 'Nein',
-    formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK), r.changedVK ? 'Ja' : 'Nein',
-    r.imZulauf, String(r.bestandGesamt),
-    String(r.bestandKG),
-    String(r.bestandNG),
-  ]));
+  const header = toCsvLine(fullHeader(idLabel));
+  const lines = filtered.map(r => toCsvLine(fullRow(r)));
   downloadCsv([header, ...lines].join('\n'), 'export_bestand_kg_gt_0.csv');
 }
 
