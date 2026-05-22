@@ -253,17 +253,30 @@ const Index = () => {
           />
         </section>
 
-        {/* New Price List - CSV Upload or Editable Table */}
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
-          <FileUploadZone
-            label="Neue Preisliste CSV hochladen"
-            description={`CSV mit 3 Spalten: ${identifierType === 'EAN' ? 'EAN' : 'HAN'};Neu EK;Neu VK (Semikolon-getrennt)`}
-            accept=".csv"
-            file={newPriceCsvFile}
-            onFile={handleNewPriceCsv}
-            onClear={() => { setNewPriceCsvFile(null); setTableRows(createInitialRows()); setResult(null); }}
-          />
+          <p className="text-xs text-muted-foreground">
+            Eine Datei mit EK & VK – oder zwei Dateien, die per {identifierType} zusammengeführt werden.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FileUploadZone
+              label="Preisliste 1"
+              description={`CSV/XLSX mit ${identifierType} + EK und/oder VK`}
+              accept=".csv,.xlsx,.xls"
+              file={newPriceCsvFile1}
+              onFile={(f) => handleNewPriceCsv(f, 1)}
+              onClear={() => clearSlot(1)}
+            />
+            <FileUploadZone
+              label="Preisliste 2 (optional)"
+              description={`Zweite Datei – wird per ${identifierType} mit Preisliste 1 zusammengeführt`}
+              accept=".csv,.xlsx,.xls"
+              file={newPriceCsvFile2}
+              onFile={(f) => handleNewPriceCsv(f, 2)}
+              onClear={() => clearSlot(2)}
+            />
+          </div>
+
           <EditableTable
             identifierType={identifierType}
             rows={tableRows}
