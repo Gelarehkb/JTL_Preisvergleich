@@ -61,9 +61,21 @@ function parseNumberOrZero(val: unknown, decimal: '.' | ',' = ','): number {
   return parseNumberSmart(val, decimal) ?? 0;
 }
 
+function normalizeHeader(s: string): string {
+  return s.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
 function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
-    if (row[name] !== undefined) return row[name];
+    if (row[name] !== undefined && row[name] !== '') return row[name];
+  }
+  // Fallback: case/whitespace/BOM-insensitive lookup
+  const wanted = names.map(normalizeHeader);
+  for (const key of Object.keys(row)) {
+    if (wanted.includes(normalizeHeader(key))) {
+      const v = row[key];
+      if (v !== undefined && v !== '') return v;
+    }
   }
   return undefined;
 }
