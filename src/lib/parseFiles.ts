@@ -149,8 +149,12 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
   const { rows, headers, decimal } = await readTable(file);
   const num = (v: unknown) => parseNumberSmart(v, decimal);
   const numZero = (v: unknown) => num(v) ?? 0;
+  const internerSchluesselColumn =
+    headers.find(h => normalizeHeader(h) === normalizeHeader('Interner Schlüssel'))
+    ?? headers[0]
+    ?? 'Interner Schlüssel';
   const jtlRows: JTLRow[] = rows.map(r => ({
-    internerSchluessel: String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
+    internerSchluessel: String(resolveColumn(r, internerSchluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
     artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
     eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
     han: String(r['HAN'] ?? '').trim(),
