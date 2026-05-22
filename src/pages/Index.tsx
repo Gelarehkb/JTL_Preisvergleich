@@ -38,14 +38,20 @@ function createInitialRows(): TableRow[] {
   }));
 }
 
+type CsvSlot = 1 | 2;
+
 const Index = () => {
   const [identifierType, setIdentifierType] = useState<IdentifierType>('HAN');
   const [tableRows, setTableRows] = useState<TableRow[]>(createInitialRows);
   const [jtlFile, setJtlFile] = useState<File | null>(null);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [newPriceCsvFile, setNewPriceCsvFile] = useState<File | null>(null);
+  const [newPriceCsvFile1, setNewPriceCsvFile1] = useState<File | null>(null);
+  const [newPriceCsvFile2, setNewPriceCsvFile2] = useState<File | null>(null);
+  const [slotRows1, setSlotRows1] = useState<NewPriceRow[] | null>(null);
+  const [slotRows2, setSlotRows2] = useState<NewPriceRow[] | null>(null);
   const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
+  const [pendingSlot, setPendingSlot] = useState<CsvSlot>(1);
   const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
   const [pendingPreview, setPendingPreview] = useState<PreviewData | null>(null);
   const [mapSku, setMapSku] = useState('');
@@ -55,30 +61,68 @@ const Index = () => {
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
-  const importCsvRows = useCallback(async (file: File, sku: string, ek: string, vk: string) => {
+  /** Merge rows from up to two slots by identifier; first non-null wins per field. */
+  const mergeSlots = useCallback((a: NewPriceRow[] | null, b: NewPriceRow[] | null): NewPriceRow[] => {
+    const map = new Map<string, NewPriceRow>();
+    const order: string[] = [];
+    const add = (rows: NewPriceRow[] | null) => {
+      if (!rows) return;
+      for (const r of rows) {
+        const key = r.sku.trim().toLowerCase();
+        if (!key) continue;
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, { sku: r.sku, newEK: r.newEK, newVK: r.newVK });
+          order.push(key);
+        } else {
+          if (existing.newEK === null && r.newEK !== null) existing.newEK = r.newEK;
+          if (existing.newVK === null && r.newVK !== null) existing.newVK = r.newVK;
+        }
+      }
+    };
+    add(a);
+    add(b);
+    return order.map(k => map.get(k)!);
+  }, []);
+
+  const applyMerged = useCallback((merged: NewPriceRow[]) => {
+    if (merged.length === 0) {
+      setTableRows(createInitialRows());
+      setResult(null);
+      return;
+    }
+    const imported: TableRow[] = merged.map((r, i) => ({
+      id: `csv-${Date.now()}-${i}`,
+      identifier: r.sku,
+      newEK: r.newEK !== null ? String(r.newEK).replace('.', ',') : '',
+      newVK: r.newVK !== null ? String(r.newVK).replace('.', ',') : '',
+    }));
+    setTableRows(imported);
+    setResult(null);
+  }, []);
+
+  const importCsvRows = useCallback(async (file: File, slot: CsvSlot, sku: string, ek: string, vk: string) => {
     try {
       const parsed = await parseNewPrices(file, sku, ek, vk);
       if (parsed.length === 0) {
         toast.error('Keine gültigen Zeilen in der CSV gefunden');
         return;
       }
-      const imported: TableRow[] = parsed.map((r, i) => ({
-        id: `csv-${Date.now()}-${i}`,
-        identifier: r.sku,
-        newEK: r.newEK !== null ? String(r.newEK).replace('.', ',') : '',
-        newVK: r.newVK !== null ? String(r.newVK).replace('.', ',') : '',
-      }));
-      setTableRows(imported);
-      setNewPriceCsvFile(file);
-      setResult(null);
-      toast.success(`${parsed.length} Zeilen importiert`);
+      let next1 = slotRows1;
+      let next2 = slotRows2;
+      if (slot === 1) { next1 = parsed; setSlotRows1(parsed); setNewPriceCsvFile1(file); }
+      else { next2 = parsed; setSlotRows2(parsed); setNewPriceCsvFile2(file); }
+      const merged = mergeSlots(next1, next2);
+      applyMerged(merged);
+      const dualMsg = next1 && next2 ? ` (${merged.length} nach Zusammenführung)` : '';
+      toast.success(`${parsed.length} Zeilen importiert${dualMsg}`);
     } catch (err) {
       toast.error('CSV Fehler: ' + (err as Error).message);
     }
-  }, []);
+  }, [slotRows1, slotRows2, mergeSlots, applyMerged]);
 
   /** Open column-mapping dialog whenever a price-list CSV is uploaded */
-  const handleNewPriceCsv = useCallback(async (file: File) => {
+  const handleNewPriceCsv = useCallback(async (file: File, slot: CsvSlot) => {
     try {
       const preview = await getPreviewData(file, 20);
       const headers = preview.headers;
@@ -90,6 +134,7 @@ const Index = () => {
         ? [/ean/i, /barcode/i, /gtin/i]
         : [/\bhan\b/i, /hersteller.*nummer/i, /mpn/i, /art.*nr/i, /sku/i];
       setPendingCsvFile(file);
+      setPendingSlot(slot);
       setPendingHeaders(headers);
       setPendingPreview(preview);
       setMapSku(guessColumn(headers, idPatterns) || headers[0]);
@@ -108,9 +153,18 @@ const Index = () => {
       return;
     }
     setShowColumnDialog(false);
-    await importCsvRows(pendingCsvFile, mapSku, mapEk, mapVk);
+    await importCsvRows(pendingCsvFile, pendingSlot, mapSku, mapEk, mapVk);
     setPendingCsvFile(null);
-  }, [pendingCsvFile, mapSku, mapEk, mapVk, importCsvRows]);
+  }, [pendingCsvFile, pendingSlot, mapSku, mapEk, mapVk, importCsvRows]);
+
+  const clearSlot = useCallback((slot: CsvSlot) => {
+    let next1 = slotRows1;
+    let next2 = slotRows2;
+    if (slot === 1) { next1 = null; setSlotRows1(null); setNewPriceCsvFile1(null); }
+    else { next2 = null; setSlotRows2(null); setNewPriceCsvFile2(null); }
+    const merged = mergeSlots(next1, next2);
+    applyMerged(merged);
+  }, [slotRows1, slotRows2, mergeSlots, applyMerged]);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
@@ -199,17 +253,30 @@ const Index = () => {
           />
         </section>
 
-        {/* New Price List - CSV Upload or Editable Table */}
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">Neue Preisliste</h2>
-          <FileUploadZone
-            label="Neue Preisliste CSV hochladen"
-            description={`CSV mit 3 Spalten: ${identifierType === 'EAN' ? 'EAN' : 'HAN'};Neu EK;Neu VK (Semikolon-getrennt)`}
-            accept=".csv"
-            file={newPriceCsvFile}
-            onFile={handleNewPriceCsv}
-            onClear={() => { setNewPriceCsvFile(null); setTableRows(createInitialRows()); setResult(null); }}
-          />
+          <p className="text-xs text-muted-foreground">
+            Eine Datei mit EK & VK – oder zwei Dateien, die per {identifierType} zusammengeführt werden.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FileUploadZone
+              label="Preisliste 1"
+              description={`CSV/XLSX mit ${identifierType} + EK und/oder VK`}
+              accept=".csv,.xlsx,.xls"
+              file={newPriceCsvFile1}
+              onFile={(f) => handleNewPriceCsv(f, 1)}
+              onClear={() => clearSlot(1)}
+            />
+            <FileUploadZone
+              label="Preisliste 2 (optional)"
+              description={`Zweite Datei – wird per ${identifierType} mit Preisliste 1 zusammengeführt`}
+              accept=".csv,.xlsx,.xls"
+              file={newPriceCsvFile2}
+              onFile={(f) => handleNewPriceCsv(f, 2)}
+              onClear={() => clearSlot(2)}
+            />
+          </div>
+
           <EditableTable
             identifierType={identifierType}
             rows={tableRows}
