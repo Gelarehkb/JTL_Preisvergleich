@@ -28,9 +28,9 @@ function normalizeKey(value: string, identifierType: IdentifierType): string {
   return value.trim();
 }
 
-// Round to 4dp before comparing — eliminates IEEE 754 float noise from XLSX
-// while preserving real 3dp wholesale prices.
-const DP = 4;
+// Round to 2dp before comparing — prices are always displayed at 2dp and XLSX
+// floats can carry sub-cent noise (e.g. 554.1199999...) that must be ignored.
+const DP = 2;
 
 function decimalEq(a: number, b: number): boolean {
   return new Decimal(a).toDecimalPlaces(DP).eq(new Decimal(b).toDecimalPlaces(DP));
