@@ -74,7 +74,7 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
 /* ── New exports ── */
 
 export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.newVK !== null && r.bestandNG > 0);
+  const filtered = rows.filter(r => r.changedVK && r.bestandNG > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
   const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand NG']);
   const lines = filtered.map(r => toCsvLine([
@@ -89,7 +89,7 @@ export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
 }
 
 export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.newVK !== null && r.bestandKG !== null && r.bestandKG > 0);
+  const filtered = rows.filter(r => r.changedVK && r.bestandKG !== null && r.bestandKG > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
   const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand KG']);
   const lines = filtered.map(r => toCsvLine([
