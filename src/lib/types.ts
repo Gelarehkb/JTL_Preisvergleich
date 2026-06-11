@@ -6,6 +6,8 @@ export interface NewPriceRow {
   newEK: number | null;
   /** null = no update provided (not "invalid") */
   newVK: number | null;
+  /** Original CSV row — present when imported from a file, absent for manual entries */
+  rawRow?: Record<string, string>;
 }
 
 export interface JTLRow {
@@ -53,6 +55,7 @@ export interface UnmatchedRow {
   identifier: string;
   newEK: number | null;
   newVK: number | null;
+  rawRow?: Record<string, string>;
 }
 
 /** A JTL row that was NOT matched by any input row */

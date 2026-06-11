@@ -72,11 +72,12 @@ const Index = () => {
         if (!key) continue;
         const existing = map.get(key);
         if (!existing) {
-          map.set(key, { sku: r.sku, newEK: r.newEK, newVK: r.newVK });
+          map.set(key, { sku: r.sku, newEK: r.newEK, newVK: r.newVK, rawRow: r.rawRow });
           order.push(key);
         } else {
           if (existing.newEK === null && r.newEK !== null) existing.newEK = r.newEK;
           if (existing.newVK === null && r.newVK !== null) existing.newVK = r.newVK;
+          if (!existing.rawRow && r.rawRow) existing.rawRow = r.rawRow;
         }
       }
     };

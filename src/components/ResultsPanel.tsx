@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ComparisonResult } from '@/lib/comparison';
-import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown } from 'lucide-react';
+import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan, exportNeuAnlegen } from '@/lib/exportCsv';
+import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown, FilePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
@@ -39,6 +39,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
     { label: 'Bestand NG > 0', icon: Package, count: bestandNGgt0Count, onClick: () => exportBestandNGgt0(rows), disabled: bestandNGgt0Count === 0 },
     { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows), disabled: bestandKGgt0Count === 0 },
     { label: 'DC/EAN', icon: FileX, count: dcEanCount, onClick: () => exportDCEan(unmatchedJTLRows), disabled: dcEanCount === 0 },
+    { label: 'Neu anlegen', icon: FilePlus, count: unmatchedRows.filter(r => r.rawRow).length, onClick: () => exportNeuAnlegen(unmatchedRows), disabled: unmatchedRows.filter(r => r.rawRow).length === 0 },
   ];
 
   return (

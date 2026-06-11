@@ -142,6 +142,7 @@ export async function parseNewPrices(
       sku: String(r[skuColumn] ?? '').trim(),
       newEK: readEK(r),
       newVK: readVK(r),
+      rawRow: Object.fromEntries(Object.entries(r).map(([k, v]) => [k, String(v ?? '')])),
     }));
 }
 

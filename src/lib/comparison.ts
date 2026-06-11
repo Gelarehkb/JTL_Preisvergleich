@@ -97,6 +97,7 @@ export function compareItems(
         identifier: np.sku,
         newEK: np.newEK,
         newVK: np.newVK,
+        rawRow: np.rawRow,
       });
       continue;
     }

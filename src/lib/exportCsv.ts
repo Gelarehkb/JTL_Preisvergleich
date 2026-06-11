@@ -1,4 +1,4 @@
-import type { ComparisonResultRow, UnmatchedJTLRow } from './types';
+import type { ComparisonResultRow, UnmatchedJTLRow, UnmatchedRow } from './types';
 
 function formatNum(n: number | null): string {
   if (n === null) return '';
@@ -119,4 +119,13 @@ export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
     ]);
   });
   downloadCsv([header, ...lines].join('\n'), 'export_DC_ean.csv');
+}
+
+export function exportNeuAnlegen(unmatchedRows: UnmatchedRow[]) {
+  const withRaw = unmatchedRows.filter(r => r.rawRow && Object.keys(r.rawRow).length > 0);
+  if (withRaw.length === 0) return;
+  const headers = Object.keys(withRaw[0].rawRow!);
+  const header = toCsvLine(headers);
+  const lines = withRaw.map(r => toCsvLine(headers.map(h => r.rawRow![h] ?? '')));
+  downloadCsv([header, ...lines].join('\n'), 'export_neu_anlegen.csv');
 }
