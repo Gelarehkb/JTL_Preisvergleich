@@ -16,8 +16,8 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
   const { rows, unmatchedRows, unmatchedJTLRows, matchedCount, unmatchedCount } = result;
 
   const changedRows = rows.filter(r => r.changedEK || r.changedVK);
-  const bestandNGgt0Count = rows.filter(r => r.bestandNG > 0).length;
-  const bestandKGgt0Count = rows.filter(r => r.bestandKG !== null && r.bestandKG > 0).length;
+  const bestandNGgt0Count = rows.filter(r => r.newVK !== null && r.bestandNG > 0).length;
+  const bestandKGgt0Count = rows.filter(r => r.newVK !== null && r.bestandKG !== null && r.bestandKG > 0).length;
   const dcEanCount = unmatchedJTLRows.length;
 
   const identifierLabel = rows.length > 0 ? (rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN') : 'Identifier';
