@@ -148,6 +148,7 @@ export function compareItems(
       newVK,
       deltaVK,
       changedVK,
+      lieferant: jtl.lieferant,
       imZulauf: jtl.imZulauf,
       bestandGesamt: jtl.bestandGesamt,
       bestandKG: jtl.bestandKG,
@@ -170,6 +171,7 @@ export function compareItems(
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
         identifier: key,
+        lieferant: jtl.lieferant,
         bestandKG: jtl.bestandKG,
         bestandNG: jtl.bestandNG,
         imZulauf: jtl.imZulauf,

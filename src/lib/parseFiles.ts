@@ -161,6 +161,7 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
     artikelname: String(resolveColumn(r, 'Artikelname', 'artikelname', 'Name') ?? '').trim(),
     ekNettoLieferant: num(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
     vkBrutto: num(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
+    lieferant: String(resolveColumn(r, 'Lieferant', 'lieferant', 'Lieferantenname', 'Supplier') ?? '').trim(),
     warengruppe: String(resolveColumn(r, 'Warengruppe', 'warengruppe') ?? '').trim(),
     hersteller: String(resolveColumn(r, 'Hersteller', 'hersteller') ?? '').trim(),
     imZulauf: String(resolveColumn(r, 'Im Zulauf', 'im Zulauf', 'ImZulauf', 'Zulauf') ?? '').trim(),

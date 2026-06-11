@@ -18,6 +18,7 @@ export interface JTLRow {
   ekNettoLieferant: number | null;
   /** null when column missing or cell empty */
   vkBrutto: number | null;
+  lieferant: string;
   warengruppe: string;
   hersteller: string;
   imZulauf: string;
@@ -40,6 +41,7 @@ export interface ComparisonResultRow {
   newVK: number | null;
   deltaVK: number | null;
   changedVK: boolean;
+  lieferant: string;
   imZulauf: string;
   bestandGesamt: number;
   bestandKG: number | null;
@@ -57,6 +59,7 @@ export interface UnmatchedRow {
 export interface UnmatchedJTLRow {
   internerSchluessel: string;
   identifier: string;
+  lieferant: string;
   bestandKG: number | null;
   bestandNG: number;
   imZulauf: string;
