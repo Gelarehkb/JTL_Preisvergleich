@@ -29,6 +29,7 @@ export interface JTLRow {
 /** A single comparison result row — returned for EVERY matched input row */
 export interface ComparisonResultRow {
   internerSchluessel: string;
+  artikelnummer: string;
   identifier: string;
   identifierType: IdentifierType;
   oldEK: number | null;

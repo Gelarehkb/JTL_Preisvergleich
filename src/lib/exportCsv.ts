@@ -67,40 +67,45 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
 /* ── New exports ── */
 
 export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.bestandNG > 0);
-  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
-  const header = toCsvLine(fullHeader(idLabel));
-  const lines = filtered.map(r => toCsvLine(fullRow(r)));
+  const filtered = rows.filter(r => r.changedVK && r.bestandNG > 0);
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand NG']);
+  const lines = filtered.map(r => toCsvLine([
+    r.internerSchluessel,
+    r.artikelnummer,
+    r.identifier,
+    formatNum(r.newVK),
+    formatNum(r.oldVK),
+    String(r.bestandNG),
+  ]));
   downloadCsv([header, ...lines].join('\n'), 'export_bestand_ng_gt_0.csv');
 }
 
 export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.bestandKG !== null && r.bestandKG > 0);
-  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
-  const header = toCsvLine(fullHeader(idLabel));
-  const lines = filtered.map(r => toCsvLine(fullRow(r)));
+  const filtered = rows.filter(r => r.changedVK && r.bestandKG !== null && r.bestandKG > 0);
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand KG']);
+  const lines = filtered.map(r => toCsvLine([
+    r.internerSchluessel,
+    r.artikelnummer,
+    r.identifier,
+    formatNum(r.newVK),
+    formatNum(r.oldVK),
+    r.bestandKG !== null ? String(r.bestandKG) : '',
+  ]));
   downloadCsv([header, ...lines].join('\n'), 'export_bestand_kg_gt_0.csv');
 }
-
 
 export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
   if (unmatchedJTLRows.length === 0) return;
 
-  const header = toCsvLine([
-    'interner Schlüssel', 'Identifier', 'Bestand KG', 'Bestand NG', 'Im Zulauf', 'DC/OP', 'active',
-  ]);
+  const header = toCsvLine(['Interner Schlüssel', 'DC/OP', 'Ist Active']);
   const lines = unmatchedJTLRows.map(r => {
-    const imZulaufNum = parseInt(r.imZulauf, 10) || 0;
-    const bestandKG = r.bestandKG ?? 0;
-    const dcOp = (bestandKG > 0 || r.bestandNG > 0 || imZulaufNum > 0 || r.bestandGesamt > 0) ? 'OP' : 'DC';
+    const isOP = r.bestandGesamt > 0;
     return toCsvLine([
       r.internerSchluessel,
-      r.identifier,
-      r.bestandKG !== null ? String(r.bestandKG) : '',
-      String(r.bestandNG),
-      r.imZulauf,
-      dcOp,
-      'N',
+      isOP ? 'OP' : '',
+      isOP ? 'Y' : 'N',
     ]);
   });
   downloadCsv([header, ...lines].join('\n'), 'export_DC_ean.csv');

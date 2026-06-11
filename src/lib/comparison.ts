@@ -141,6 +141,7 @@ export function compareItems(
 
     rows.push({
       internerSchluessel: jtl.internerSchluessel,
+      artikelnummer: jtl.artikelnummer,
       identifier: np.sku,
       identifierType,
       oldEK,
