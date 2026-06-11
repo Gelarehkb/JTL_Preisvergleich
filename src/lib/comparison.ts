@@ -28,20 +28,16 @@ function normalizeKey(value: string, identifierType: IdentifierType): string {
   return value.trim();
 }
 
-/**
- * Exact decimal equality using Decimal.js.
- * Returns true if the two numbers are exactly equal in decimal representation.
- */
+// Round to 4dp before comparing — eliminates IEEE 754 float noise from XLSX
+// while preserving real 3dp wholesale prices.
+const DP = 4;
+
 function decimalEq(a: number, b: number): boolean {
-  return new Decimal(a).eq(new Decimal(b));
+  return new Decimal(a).toDecimalPlaces(DP).eq(new Decimal(b).toDecimalPlaces(DP));
 }
 
-/**
- * Exact decimal subtraction using Decimal.js.
- * Returns the result as a JS number for storage.
- */
 function decimalSub(a: number, b: number): number {
-  return new Decimal(a).minus(new Decimal(b)).toNumber();
+  return new Decimal(a).toDecimalPlaces(DP).minus(new Decimal(b).toDecimalPlaces(DP)).toNumber();
 }
 
 /**
