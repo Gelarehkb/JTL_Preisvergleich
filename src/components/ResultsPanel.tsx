@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import type { ComparisonResult } from '@/lib/comparison';
 import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX } from 'lucide-react';
+import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
@@ -12,8 +13,11 @@ function fmt(n: number | null): string {
   return n.toFixed(2);
 }
 
+const PREVIEW_LIMIT = 10;
+
 export function ResultsPanel({ result }: ResultsPanelProps) {
   const { rows, unmatchedRows, unmatchedJTLRows, matchedCount, unmatchedCount } = result;
+  const [showAll, setShowAll] = useState(false);
 
   const changedRows = rows.filter(r => r.changedEK || r.changedVK);
   const bestandNGgt0Count = rows.filter(r => r.changedVK && r.bestandNG > 0).length;
@@ -74,11 +78,14 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
         ))}
       </div>
 
-      {/* Result table — ALL matched rows */}
+      {/* Result table — preview + show all */}
       {rows.length > 0 && (
         <div className="rounded-lg border bg-card overflow-hidden">
-          <div className="border-b bg-muted/50 px-4 py-2.5">
+          <div className="border-b bg-muted/50 px-4 py-2.5 flex items-center justify-between">
             <p className="text-sm font-semibold">Vergleichsergebnis ({rows.length} Zeilen, {changedRows.length} geändert)</p>
+            {!showAll && rows.length > PREVIEW_LIMIT && (
+              <span className="text-xs text-muted-foreground">Vorschau: erste {PREVIEW_LIMIT} Zeilen</span>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -96,7 +103,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => {
+                {(showAll ? rows : rows.slice(0, PREVIEW_LIMIT)).map((r, i) => {
                   const hasChange = r.changedEK || r.changedVK;
                   return (
                     <tr key={i} className={`border-b last:border-0 hover:bg-muted/20 ${!hasChange ? 'opacity-50' : ''}`}>
@@ -119,6 +126,14 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
               </tbody>
             </table>
           </div>
+          {rows.length > PREVIEW_LIMIT && (
+            <div className="border-t px-4 py-2.5 flex justify-center">
+              <Button variant="ghost" size="sm" className="gap-2 text-xs" onClick={() => setShowAll(v => !v)}>
+                <ChevronsUpDown className="h-3.5 w-3.5" />
+                {showAll ? `Weniger anzeigen` : `Alle ${rows.length} Zeilen anzeigen`}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
