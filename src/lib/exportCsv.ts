@@ -31,7 +31,7 @@ function fullHeader(idLabel: string): string[] {
   return [
     'Interner Schlüssel', idLabel, 'OLD EK', 'NEW EK', 'EK Differenz', 'EK Geändert',
     'OLD VK', 'NEW VK', 'VK Differenz', 'VK Geändert',
-    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG',
+    'Im Zulauf', 'Bestand Gesamt', 'Bestand KG', 'Bestand NG', 'Lieferant',
   ];
 }
 
@@ -44,6 +44,7 @@ function fullRow(r: ComparisonResultRow): string[] {
     r.imZulauf, String(r.bestandGesamt),
     r.bestandKG !== null ? String(r.bestandKG) : '',
     String(r.bestandNG),
+    r.lieferant,
   ];
 }
 
@@ -59,13 +60,14 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'EAN' : 'HAN';
   const header = toCsvLine([
     'Interner Schlüssel', idLabel, 'OLD EK', 'NEW EK', 'EK Differenz',
-    'OLD VK', 'NEW VK', 'VK Differenz',
+    'OLD VK', 'NEW VK', 'VK Differenz', 'Lieferant',
   ]);
   const lines = changed.map(r => toCsvLine([
     r.internerSchluessel,
     r.identifier,
     formatNum(r.oldEK), formatNum(r.newEK), formatNum(r.deltaEK),
     formatNum(r.oldVK), formatNum(r.newVK), formatNum(r.deltaVK),
+    r.lieferant,
   ]));
   downloadCsv([header, ...lines].join('\n'), 'preisaenderungen.csv');
 }
@@ -81,7 +83,7 @@ function exportBestandGt0(
 ) {
   const filtered = rows.filter(r => r.changedVK && (getStock(r) ?? 0) > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
-  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel]);
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel, 'Lieferant']);
   const lines = filtered.map(r => toCsvLine([
     r.internerSchluessel,
     r.artikelnummer,
@@ -89,6 +91,7 @@ function exportBestandGt0(
     formatNum(r.newVK),
     formatNum(r.oldVK),
     String(getStock(r) ?? ''),
+    r.lieferant,
   ]));
   downloadCsv([header, ...lines].join('\n'), filename);
 }
@@ -104,13 +107,15 @@ export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
 export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
   if (unmatchedJTLRows.length === 0) return;
 
-  const header = toCsvLine(['Interner Schlüssel', 'DC/OP', 'Ist Active']);
+  const header = toCsvLine(['Interner Schlüssel', 'Name', 'DC/OP', 'Ist Active', 'Lieferant']);
   const lines = unmatchedJTLRows.map(r => {
     const isOP = r.bestandGesamt > 0;
     return toCsvLine([
       r.internerSchluessel,
+      'DC/OP',
       isOP ? 'OP' : '',
       isOP ? 'Y' : 'N',
+      r.lieferant,
     ]);
   });
   downloadCsv([header, ...lines].join('\n'), 'export_DC_ean.csv');
