@@ -73,34 +73,32 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
 
 /* ── New exports ── */
 
-export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.changedVK && r.bestandNG > 0);
+function exportBestandGt0(
+  rows: ComparisonResultRow[],
+  getStock: (r: ComparisonResultRow) => number | null,
+  stockLabel: string,
+  filename: string,
+) {
+  const filtered = rows.filter(r => r.changedVK && (getStock(r) ?? 0) > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
-  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand NG']);
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel]);
   const lines = filtered.map(r => toCsvLine([
     r.internerSchluessel,
     r.artikelnummer,
     r.identifier,
     formatNum(r.newVK),
     formatNum(r.oldVK),
-    String(r.bestandNG),
+    String(getStock(r) ?? ''),
   ]));
-  downloadCsv([header, ...lines].join('\n'), 'export_bestand_ng_gt_0.csv');
+  downloadCsv([header, ...lines].join('\n'), filename);
+}
+
+export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
+  exportBestandGt0(rows, r => r.bestandNG, 'Lager Bestand NG', 'export_bestand_ng_gt_0.csv');
 }
 
 export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
-  const filtered = rows.filter(r => r.changedVK && r.bestandKG !== null && r.bestandKG > 0);
-  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
-  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand KG']);
-  const lines = filtered.map(r => toCsvLine([
-    r.internerSchluessel,
-    r.artikelnummer,
-    r.identifier,
-    formatNum(r.newVK),
-    formatNum(r.oldVK),
-    r.bestandKG !== null ? String(r.bestandKG) : '',
-  ]));
-  downloadCsv([header, ...lines].join('\n'), 'export_bestand_kg_gt_0.csv');
+  exportBestandGt0(rows, r => r.bestandKG, 'Lager Bestand KG', 'export_bestand_kg_gt_0.csv');
 }
 
 export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
