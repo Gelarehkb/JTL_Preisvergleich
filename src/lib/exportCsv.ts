@@ -5,8 +5,15 @@ function formatNum(n: number | null): string {
   return n.toFixed(2).replace('.', ',');
 }
 
+function escapeCsvField(value: string): string {
+  if (value.includes(';') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
+}
+
 function toCsvLine(values: string[]): string {
-  return values.join(';');
+  return values.map(escapeCsvField).join(';');
 }
 
 function downloadCsv(content: string, filename: string) {

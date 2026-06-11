@@ -155,18 +155,18 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
     ?? 'Interner Schlüssel';
   const jtlRows: JTLRow[] = rows.map(r => ({
     internerSchluessel: String(resolveColumn(r, internerSchluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
-    artikelnummer: String(r['Artikelnummer'] ?? '').trim(),
-    eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN') ?? '').trim(),
-    han: String(r['HAN'] ?? '').trim(),
-    artikelname: String(r['Artikelname'] ?? '').trim(),
+    artikelnummer: String(resolveColumn(r, 'Artikelnummer', 'artikelnummer', 'Artikel-Nr', 'ArtikelNr') ?? '').trim(),
+    eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN', 'Barcode') ?? '').trim(),
+    han: String(resolveColumn(r, 'HAN', 'han', 'Hersteller-Artikelnummer') ?? '').trim(),
+    artikelname: String(resolveColumn(r, 'Artikelname', 'artikelname', 'Name') ?? '').trim(),
     ekNettoLieferant: num(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
     vkBrutto: num(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
-    warengruppe: String(r['Warengruppe'] ?? '').trim(),
-    hersteller: String(r['Hersteller'] ?? '').trim(),
-    imZulauf: String(r['Im Zulauf'] ?? '').trim(),
-    bestandGesamt: numZero(r['Bestand Gesamt']),
-    bestandKG: r['Bestand KG'] !== undefined && r['Bestand KG'] !== '' ? numZero(r['Bestand KG']) : null,
-    bestandNG: numZero(r['Bestand NG']),
+    warengruppe: String(resolveColumn(r, 'Warengruppe', 'warengruppe') ?? '').trim(),
+    hersteller: String(resolveColumn(r, 'Hersteller', 'hersteller') ?? '').trim(),
+    imZulauf: String(resolveColumn(r, 'Im Zulauf', 'im Zulauf', 'ImZulauf', 'Zulauf') ?? '').trim(),
+    bestandGesamt: numZero(resolveColumn(r, 'Bestand Gesamt', 'BestandGesamt', 'Gesamt')),
+    bestandKG: (() => { const v = resolveColumn(r, 'Bestand KG', 'BestandKG', 'Lager KG'); return v !== undefined && v !== '' ? numZero(v) : null; })(),
+    bestandNG: numZero(resolveColumn(r, 'Bestand NG', 'BestandNG', 'Lager NG')),
   }));
   return { rows: jtlRows, headers };
 }
