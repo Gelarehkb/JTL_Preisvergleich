@@ -4,9 +4,9 @@ import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
 import { ColumnMapper } from '@/components/ColumnMapper';
 import { PreviewTable } from '@/components/PreviewTable';
-import { parseJTL, parseNewPrices, getPreviewData, type PreviewData } from '@/lib/parseFiles';
+import { parseJTL, parseNewPrices, parseLagerFile, getPreviewData, type PreviewData } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
-import type { IdentifierType, NewPriceRow } from '@/lib/types';
+import type { IdentifierType, NewPriceRow, LagerEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,8 +44,11 @@ const Index = () => {
   const [identifierType, setIdentifierType] = useState<IdentifierType>('HAN');
   const [tableRows, setTableRows] = useState<TableRow[]>(createInitialRows);
   const [jtlFile, setJtlFile] = useState<File | null>(null);
+  const [lagerFile, setLagerFile] = useState<File | null>(null);
+  const [lagerMap, setLagerMap] = useState<Map<string, LagerEntry> | null>(null);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rawRowMap, setRawRowMap] = useState<Map<string, Record<string, string>>>(new Map());
   const [newPriceCsvFile1, setNewPriceCsvFile1] = useState<File | null>(null);
   const [newPriceCsvFile2, setNewPriceCsvFile2] = useState<File | null>(null);
   const [slotRows1, setSlotRows1] = useState<NewPriceRow[] | null>(null);
@@ -89,6 +92,7 @@ const Index = () => {
   const applyMerged = useCallback((merged: NewPriceRow[]) => {
     if (merged.length === 0) {
       setTableRows(createInitialRows());
+      setRawRowMap(new Map());
       setResult(null);
       return;
     }
@@ -98,7 +102,10 @@ const Index = () => {
       newEK: r.newEK !== null ? String(r.newEK).replace('.', ',') : '',
       newVK: r.newVK !== null ? String(r.newVK).replace('.', ',') : '',
     }));
+    const newRawMap = new Map<string, Record<string, string>>();
+    merged.forEach(r => { if (r.rawRow) newRawMap.set(r.sku.trim().toLowerCase(), r.rawRow); });
     setTableRows(imported);
+    setRawRowMap(newRawMap);
     setResult(null);
   }, []);
 
@@ -175,6 +182,7 @@ const Index = () => {
         sku: r.identifier.trim(),
         newEK: parseNumber(r.newEK),
         newVK: parseNumber(r.newVK),
+        rawRow: rawRowMap.get(r.identifier.trim().toLowerCase()),
       }));
 
       const { rows: jtlRows } = await parseJTL(jtlFile);
@@ -244,14 +252,32 @@ const Index = () => {
         {/* JTL Export Upload */}
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-foreground">JTL Export</h2>
-          <FileUploadZone
-            label="JTL Export hochladen"
-            description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
-            accept=".csv"
-            file={jtlFile}
-            onFile={(f) => { setJtlFile(f); setResult(null); }}
-            onClear={() => { setJtlFile(null); setResult(null); }}
-          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FileUploadZone
+              label="JTL Export hochladen"
+              description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
+              accept=".csv"
+              file={jtlFile}
+              onFile={(f) => { setJtlFile(f); setResult(null); }}
+              onClear={() => { setJtlFile(null); setResult(null); }}
+            />
+            <FileUploadZone
+              label="JTL Lager Export (optional)"
+              description="CSV mit Interner Schlüssel, Lagerplatz, Kommentar"
+              accept=".csv"
+              file={lagerFile}
+              onFile={async (f) => {
+                setLagerFile(f);
+                try {
+                  const map = await parseLagerFile(f);
+                  setLagerMap(map);
+                } catch (err) {
+                  toast.error('Lager Export Fehler: ' + (err as Error).message);
+                }
+              }}
+              onClear={() => { setLagerFile(null); setLagerMap(null); }}
+            />
+          </div>
         </section>
 
         <section className="space-y-2">
@@ -286,7 +312,7 @@ const Index = () => {
         </section>
 
         {/* Results */}
-        {result && <ResultsPanel result={result} />}
+        {result && <ResultsPanel result={result} lagerMap={lagerMap} />}
       </main>
 
       {/* Column mapping dialog */}
