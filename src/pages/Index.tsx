@@ -263,8 +263,8 @@ const Index = () => {
             />
             <FileUploadZone
               label="JTL Lager Export (optional)"
-              description="CSV mit Interner Schlüssel, Lagerplatz, Kommentar"
-              accept=".csv"
+              description="CSV/XLSX mit Interner Schlüssel, Lagerplatz, Kommentar"
+              accept=".csv,.xlsx,.xls"
               file={lagerFile}
               onFile={async (f) => {
                 setLagerFile(f);

@@ -65,6 +65,15 @@ function normalizeHeader(s: string): string {
   return s.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/** Normalize an Interner Schl\u00FCssel value to a consistent string key.
+ *  Handles: BOM, whitespace, Excel float representation (158279.0 \u2192 "158279"). */
+export function normalizeSchluessel(val: unknown): string {
+  if (val === null || val === undefined || val === '') return '';
+  const s = String(val).replace(/^\uFEFF/, '').trim();
+  // Strip .0 / .00 suffix from Excel numeric cells (e.g. "158279.0" \u2192 "158279")
+  return s.replace(/\.0+$/, '');
+}
+
 function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
     if (row[name] !== undefined && row[name] !== '') return row[name];
@@ -155,7 +164,7 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
     ?? headers[0]
     ?? 'Interner Schlüssel';
   const jtlRows: JTLRow[] = rows.map(r => ({
-    internerSchluessel: String(resolveColumn(r, internerSchluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel') ?? '').trim(),
+    internerSchluessel: normalizeSchluessel(resolveColumn(r, internerSchluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel')),
     artikelnummer: String(resolveColumn(r, 'Artikelnummer', 'artikelnummer', 'Artikel-Nr', 'ArtikelNr') ?? '').trim(),
     eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN', 'Barcode') ?? '').trim(),
     han: String(resolveColumn(r, 'HAN', 'han', 'Hersteller-Artikelnummer') ?? '').trim(),
@@ -174,10 +183,15 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
 }
 
 export async function parseLagerFile(file: File): Promise<Map<string, LagerEntry>> {
-  const { rows } = await readTable(file);
+  const { rows, headers } = await readTable(file);
+  // Use the same internerSchluessel column detection as parseJTL
+  const schluesselColumn =
+    headers.find(h => normalizeHeader(h) === normalizeHeader('Interner Schlüssel'))
+    ?? headers[0]
+    ?? 'Interner Schlüssel';
   const map = new Map<string, LagerEntry>();
   for (const r of rows) {
-    const key = String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel') ?? '').trim();
+    const key = normalizeSchluessel(resolveColumn(r, schluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel'));
     if (!key) continue;
     if (map.has(key)) continue;
     map.set(key, {
@@ -185,6 +199,7 @@ export async function parseLagerFile(file: File): Promise<Map<string, LagerEntry
       kommentar: String(resolveColumn(r, 'Kommentar', 'kommentar', 'Comment') ?? '').trim(),
     });
   }
+  console.log('[parseLagerFile] loaded', map.size, 'entries, sample keys:', [...map.keys()].slice(0, 5));
   return map;
 }
 

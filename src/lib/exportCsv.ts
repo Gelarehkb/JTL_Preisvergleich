@@ -85,6 +85,10 @@ function buildBestandGt0(
 ): { content: string; filename: string } | null {
   const filtered = rows.filter(r => r.changedVK && (getStock(r) ?? 0) > 0);
   if (filtered.length === 0) return null;
+  if (lagerMap) {
+    const hits = filtered.filter(r => lagerMap.has(r.internerSchluessel)).length;
+    console.log(`[exportBestandGt0] lagerMap size=${lagerMap.size}, rows=${filtered.length}, hits=${hits}`, 'sample row key:', filtered[0]?.internerSchluessel, 'sample map key:', [...lagerMap.keys()][0]);
+  }
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
   const extraHeaders = lagerMap ? ['Lagerplatz', 'Kommentar'] : [];
   const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel, ...extraHeaders, 'Lieferant']);
