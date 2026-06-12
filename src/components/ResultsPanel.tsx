@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { ComparisonResult } from '@/lib/comparison';
 import type { LagerEntry } from '@/lib/types';
-import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan, exportNeuAnlegen } from '@/lib/exportCsv';
-import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown, FilePlus } from 'lucide-react';
+import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan, exportNeuAnlegen, downloadAllExports } from '@/lib/exportCsv';
+import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown, FilePlus, FolderDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
@@ -79,6 +79,19 @@ export function ResultsPanel({ result, lagerMap }: ResultsPanelProps) {
             <span className="text-xs text-muted-foreground font-mono">{exp.count} Zeilen</span>
           </Button>
         ))}
+      </div>
+
+      {/* Download all as ZIP */}
+      <div className="flex justify-end">
+        <Button
+          variant="default"
+          className="gap-2"
+          onClick={() => downloadAllExports(rows, unmatchedJTLRows, unmatchedRows, rows[0]?.identifierType ?? 'EAN', lagerMap ?? undefined)}
+          disabled={rows.length === 0 && unmatchedJTLRows.length === 0 && unmatchedRows.length === 0}
+        >
+          <FolderDown className="h-4 w-4" />
+          Alle als ZIP herunterladen
+        </Button>
       </div>
 
       {/* Result table — preview + show all */}
