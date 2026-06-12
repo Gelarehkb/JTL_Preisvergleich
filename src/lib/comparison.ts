@@ -186,9 +186,8 @@ export function compareItems(
   // (identified by Artikelnummer prefix) are also being deactivated.
   // Do NOT include them if any child is still active — deactivating a Vater cascades to children.
 
-  const isVaterOrSet = (jtl: JTLRow): boolean => {
-    const han = jtl.han.trim().toLowerCase();
-    return han === 'vater' || han === 'set' || jtl.eanBarcode.trim() === '';
+  const isVater = (jtl: JTLRow): boolean => {
+    return jtl.han.trim().toLowerCase() === 'vater' || jtl.eanBarcode.trim() === '';
   };
 
   const findChildren = (vater: JTLRow): JTLRow[] => {
@@ -204,7 +203,7 @@ export function compareItems(
     if (vater.artikelname.trim()) {
       return jtlRows.filter(r =>
         r !== vater &&
-        !isVaterOrSet(r) &&
+        !isVater(r) &&
         r.artikelname.startsWith(vater.artikelname) &&
         r.artikelname.length > vater.artikelname.length
       );
@@ -218,7 +217,7 @@ export function compareItems(
   const processedVater = new Set<string>();
 
   for (const jtl of jtlRows) {
-    if (!isVaterOrSet(jtl)) continue;
+    if (!isVater(jtl)) continue;
     if (processedVater.has(jtl.internerSchluessel)) continue;
     processedVater.add(jtl.internerSchluessel);
 
