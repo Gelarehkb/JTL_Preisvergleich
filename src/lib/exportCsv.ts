@@ -76,32 +76,45 @@ function buildChangedOnly(rows: ComparisonResultRow[]): { content: string; filen
   return { content: [header, ...lines].join('\n'), filename: 'preisaenderungen.csv' };
 }
 
-function buildBestandGt0(
+function buildBestandNG(
   rows: ComparisonResultRow[],
-  getStock: (r: ComparisonResultRow) => number | null,
-  stockLabel: string,
-  filename: string,
   lagerMap?: Map<string, LagerEntry>,
 ): { content: string; filename: string } | null {
-  const filtered = rows.filter(r => r.changedVK && (getStock(r) ?? 0) > 0);
+  const filtered = rows.filter(r => r.changedVK && r.bestandNG > 0);
   if (filtered.length === 0) return null;
   if (lagerMap) {
-    const hits = filtered.filter(r => lagerMap.has(r.internerSchluessel)).length;
-    console.log(`[exportBestandGt0] lagerMap size=${lagerMap.size}, rows=${filtered.length}, hits=${hits}`, 'sample row key:', filtered[0]?.internerSchluessel, 'sample map key:', [...lagerMap.keys()][0]);
+    const hits = filtered.filter(r => lagerMap.has(r.artikelnummer)).length;
+    console.log(`[buildBestandNG] lagerMap size=${lagerMap.size}, rows=${filtered.length}, hits=${hits}`, 'sample row key:', filtered[0]?.artikelnummer, 'sample map key:', [...lagerMap.keys()][0]);
   }
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
   const extraHeaders = lagerMap ? ['Lagerplatz', 'Kommentar'] : [];
-  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel, ...extraHeaders, 'Lieferant']);
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand NG', ...extraHeaders, 'Lieferant']);
   const lines = filtered.map(r => {
-    const lager = lagerMap?.get(r.internerSchluessel);
+    const lager = lagerMap?.get(r.artikelnummer);
     const extraValues = lagerMap ? [lager?.lagerplatz ?? '', lager?.kommentar ?? ''] : [];
+    const lieferant = lager?.lieferant || r.lieferant;
     return toCsvLine([
       r.internerSchluessel, r.artikelnummer, r.identifier,
-      formatNum(r.newVK), formatNum(r.oldVK), String(getStock(r) ?? ''),
-      ...extraValues, r.lieferant,
+      formatNum(r.newVK), formatNum(r.oldVK), String(r.bestandNG),
+      ...extraValues, lieferant,
     ]);
   });
-  return { content: [header, ...lines].join('\n'), filename };
+  return { content: [header, ...lines].join('\n'), filename: 'export_bestand_ng_gt_0.csv' };
+}
+
+function buildBestandKG(
+  rows: ComparisonResultRow[],
+): { content: string; filename: string } | null {
+  const filtered = rows.filter(r => r.changedVK && (r.bestandKG ?? 0) > 0);
+  if (filtered.length === 0) return null;
+  const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', 'Lager Bestand KG', 'Lieferant']);
+  const lines = filtered.map(r => toCsvLine([
+    r.internerSchluessel, r.artikelnummer, r.identifier,
+    formatNum(r.newVK), formatNum(r.oldVK), String(r.bestandKG ?? ''),
+    r.lieferant,
+  ]));
+  return { content: [header, ...lines].join('\n'), filename: 'export_bestand_kg_gt_0.csv' };
 }
 
 function buildDCEan(
@@ -139,12 +152,12 @@ export function exportChangedOnly(rows: ComparisonResultRow[]) {
 }
 
 export function exportBestandNGgt0(rows: ComparisonResultRow[], lagerMap?: Map<string, LagerEntry>) {
-  const f = buildBestandGt0(rows, r => r.bestandNG, 'Lager Bestand NG', 'export_bestand_ng_gt_0.csv', lagerMap);
+  const f = buildBestandNG(rows, lagerMap);
   if (f) downloadCsv(f.content, f.filename);
 }
 
-export function exportBestandKGgt0(rows: ComparisonResultRow[], lagerMap?: Map<string, LagerEntry>) {
-  const f = buildBestandGt0(rows, r => r.bestandKG, 'Lager Bestand KG', 'export_bestand_kg_gt_0.csv', lagerMap);
+export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
+  const f = buildBestandKG(rows);
   if (f) downloadCsv(f.content, f.filename);
 }
 
@@ -170,8 +183,8 @@ export async function downloadAllExports(
   const files = [
     buildAllRows(rows),
     buildChangedOnly(rows),
-    buildBestandGt0(rows, r => r.bestandNG, 'Lager Bestand NG', 'export_bestand_ng_gt_0.csv', lagerMap),
-    buildBestandGt0(rows, r => r.bestandKG, 'Lager Bestand KG', 'export_bestand_kg_gt_0.csv', lagerMap),
+    buildBestandNG(rows, lagerMap),
+    buildBestandKG(rows),
     buildDCEan(unmatchedJTLRows, identifierType),
     buildNeuAnlegen(unmatchedRows),
   ].filter((f): f is { content: string; filename: string } => f !== null);

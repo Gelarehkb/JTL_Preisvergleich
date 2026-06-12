@@ -3,6 +3,7 @@ export type IdentifierType = 'HAN' | 'EAN';
 export interface LagerEntry {
   lagerplatz: string;
   kommentar: string;
+  lieferant: string;
 }
 
 export interface NewPriceRow {

@@ -184,19 +184,20 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
 
 export async function parseLagerFile(file: File): Promise<Map<string, LagerEntry>> {
   const { rows, headers } = await readTable(file);
-  // Use the same internerSchluessel column detection as parseJTL
-  const schluesselColumn =
-    headers.find(h => normalizeHeader(h) === normalizeHeader('Interner Schlüssel'))
+  // Key by Artikelnummer (column 1 per the JTL Lager export format)
+  const artikelnummerColumn =
+    headers.find(h => normalizeHeader(h) === normalizeHeader('Artikelnummer'))
     ?? headers[0]
-    ?? 'Interner Schlüssel';
+    ?? 'Artikelnummer';
   const map = new Map<string, LagerEntry>();
   for (const r of rows) {
-    const key = normalizeSchluessel(resolveColumn(r, schluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel'));
+    const key = String(resolveColumn(r, artikelnummerColumn, 'Artikelnummer', 'artikelnummer') ?? '').trim();
     if (!key) continue;
     if (map.has(key)) continue;
     map.set(key, {
       lagerplatz: String(resolveColumn(r, 'Lagerplatz', 'lagerplatz') ?? '').trim(),
       kommentar: String(resolveColumn(r, 'Kommentar', 'kommentar', 'Comment') ?? '').trim(),
+      lieferant: String(resolveColumn(r, 'Lieferant', 'lieferant', 'Lieferantenname', 'Supplier') ?? '').trim(),
     });
   }
   console.log('[parseLagerFile] loaded', map.size, 'entries, sample keys:', [...map.keys()].slice(0, 5));

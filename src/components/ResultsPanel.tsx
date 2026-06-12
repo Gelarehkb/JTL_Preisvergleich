@@ -39,7 +39,7 @@ export function ResultsPanel({ result, lagerMap }: ResultsPanelProps) {
     { label: 'Alle Zeilen', icon: List, count: rows.length, onClick: () => exportAllRows(rows), disabled: rows.length === 0 },
     { label: 'Nur Änderungen', icon: ArrowUpDown, count: changedRows.length, onClick: () => exportChangedOnly(rows), disabled: changedRows.length === 0 },
     { label: 'Bestand NG > 0', icon: Package, count: bestandNGgt0Count, onClick: () => exportBestandNGgt0(rows, lagerMap ?? undefined), disabled: bestandNGgt0Count === 0 },
-    { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows, lagerMap ?? undefined), disabled: bestandKGgt0Count === 0 },
+    { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows), disabled: bestandKGgt0Count === 0 },
     { label: 'DC/EAN', icon: FileX, count: dcEanCount, onClick: () => exportDCEan(unmatchedJTLRows, rows[0]?.identifierType ?? 'EAN'), disabled: dcEanCount === 0 },
     { label: 'Neu anlegen', icon: FilePlus, count: unmatchedRows.filter(r => r.rawRow).length, onClick: () => exportNeuAnlegen(unmatchedRows), disabled: unmatchedRows.filter(r => r.rawRow).length === 0 },
   ];
