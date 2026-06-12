@@ -167,8 +167,6 @@ export function compareItems(
   const unmatchedJTLRows: UnmatchedJTLRow[] = [];
   for (const [key, jtl] of jtlMap) {
     if (!matchedKeys.has(key)) {
-      // Include all unmatched JTL rows — even if internerSchluessel is empty
-      // The identifier (EAN/HAN) is always available as the map key
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
         artikelnummer: jtl.artikelnummer,
@@ -182,6 +180,81 @@ export function compareItems(
     }
   }
 
+  // ── Step 4: Vater/SET parent article rule ──
+  // Parent articles (han === 'Vater'/'SET' or empty EAN) are never in the price list,
+  // so they always appear as unmatched. Include them in DC/EAN only if ALL their children
+  // (identified by Artikelnummer prefix) are also being deactivated.
+  // Do NOT include them if any child is still active — deactivating a Vater cascades to children.
+
+  const isVaterOrSet = (jtl: JTLRow): boolean => {
+    const han = jtl.han.trim().toLowerCase();
+    return han === 'vater' || han === 'set' || jtl.eanBarcode.trim() === '';
+  };
+
+  const findChildren = (vater: JTLRow): JTLRow[] => {
+    // Primary: Artikelnummer prefix (when Artikelnummer is populated)
+    if (vater.artikelnummer.trim()) {
+      return jtlRows.filter(r =>
+        r !== vater &&
+        r.artikelnummer.startsWith(vater.artikelnummer) &&
+        r.artikelnummer.length > vater.artikelnummer.length
+      );
+    }
+    // Fallback: Artikelname prefix (e.g. JTL exports where Artikelnummer is empty)
+    if (vater.artikelname.trim()) {
+      return jtlRows.filter(r =>
+        r !== vater &&
+        !isVaterOrSet(r) &&
+        r.artikelname.startsWith(vater.artikelname) &&
+        r.artikelname.length > vater.artikelname.length
+      );
+    }
+    return [];
+  };
+
+  const unmatchedInternerSchluessel = new Set(unmatchedJTLRows.map(r => r.internerSchluessel));
+  const vaterToAdd: UnmatchedJTLRow[] = [];
+  const vaterToRemove = new Set<string>(); // internerSchluessel
+  const processedVater = new Set<string>();
+
+  for (const jtl of jtlRows) {
+    if (!isVaterOrSet(jtl)) continue;
+    if (processedVater.has(jtl.internerSchluessel)) continue;
+    processedVater.add(jtl.internerSchluessel);
+
+    const children = findChildren(jtl);
+    if (children.length === 0) {
+      // No children found by prefix — leave as-is (orphan Vater, keep if in list)
+      continue;
+    }
+
+    const allChildrenUnmatched = children.every(c => unmatchedInternerSchluessel.has(c.internerSchluessel));
+    const alreadyInList = unmatchedJTLRows.some(r => r.internerSchluessel === jtl.internerSchluessel);
+
+    if (allChildrenUnmatched) {
+      if (!alreadyInList) {
+        vaterToAdd.push({
+          internerSchluessel: jtl.internerSchluessel,
+          artikelnummer: jtl.artikelnummer,
+          identifier: jtl.internerSchluessel,
+          lieferant: jtl.lieferant,
+          bestandKG: jtl.bestandKG,
+          bestandNG: jtl.bestandNG,
+          imZulauf: jtl.imZulauf,
+          bestandGesamt: jtl.bestandGesamt,
+        });
+      }
+    } else {
+      // At least one child is still active → Vater must not be deactivated
+      if (alreadyInList) vaterToRemove.add(jtl.internerSchluessel);
+    }
+  }
+
+  const finalUnmatchedJTLRows = [
+    ...unmatchedJTLRows.filter(r => !vaterToRemove.has(r.internerSchluessel)),
+    ...vaterToAdd,
+  ];
+
   // Diagnostics
   console.log('[compareItems] total JTL rows:', jtlRows.length, 'total new rows:', newPrices.length);
   console.log('[compareItems] matched:', rows.length, 'unmatched:', unmatchedRows.length, 'unmatchedJTL:', unmatchedJTLRows.length);
@@ -194,7 +267,7 @@ export function compareItems(
   return {
     rows,
     unmatchedRows,
-    unmatchedJTLRows,
+    unmatchedJTLRows: finalUnmatchedJTLRows,
     duplicateIdentifiers,
     matchedCount: rows.length,
     unmatchedCount: unmatchedRows.length,
