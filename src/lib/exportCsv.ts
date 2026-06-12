@@ -1,7 +1,14 @@
 import JSZip from 'jszip';
 import type { ComparisonResultRow, UnmatchedJTLRow, UnmatchedRow, LagerEntry } from './types';
 
-const BOM = '﻿';
+function toUtf8WithBom(content: string): ArrayBuffer {
+  const encoded = new TextEncoder().encode(content);
+  const buf = new ArrayBuffer(3 + encoded.byteLength);
+  const view = new Uint8Array(buf);
+  view[0] = 0xEF; view[1] = 0xBB; view[2] = 0xBF;
+  view.set(encoded, 3);
+  return buf;
+}
 
 function formatNum(n: number | null): string {
   if (n === null) return '';
@@ -20,7 +27,7 @@ function toCsvLine(values: string[]): string {
 }
 
 function downloadCsv(content: string, filename: string) {
-  const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([toUtf8WithBom(content)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -193,7 +200,7 @@ export async function downloadAllExports(
 
   const zip = new JSZip();
   for (const f of files) {
-    zip.file(f.filename, BOM + f.content);
+    zip.file(f.filename, toUtf8WithBom(f.content));
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
