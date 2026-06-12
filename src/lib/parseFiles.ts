@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import type { NewPriceRow, JTLRow } from './types';
+import type { NewPriceRow, JTLRow, LagerEntry } from './types';
 
 /* ============================================================
  * Auto-detection: separator (; , \t |) and decimal mark (, .)
@@ -160,17 +160,32 @@ export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: s
     eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN', 'Barcode') ?? '').trim(),
     han: String(resolveColumn(r, 'HAN', 'han', 'Hersteller-Artikelnummer') ?? '').trim(),
     artikelname: String(resolveColumn(r, 'Artikelname', 'artikelname', 'Name') ?? '').trim(),
-    ekNettoLieferant: num(resolveColumn(r, 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
-    vkBrutto: num(resolveColumn(r, 'VK brutto', 'VK Brutto', 'VK')),
+    ekNettoLieferant: num(resolveColumn(r, 'Netto-EK', 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
+    vkBrutto: num(resolveColumn(r, 'Std. VK Brutto', 'VK brutto', 'VK Brutto', 'VK')),
     lieferant: String(resolveColumn(r, 'Lieferant', 'lieferant', 'Lieferantenname', 'Supplier') ?? '').trim(),
     warengruppe: String(resolveColumn(r, 'Warengruppe', 'warengruppe') ?? '').trim(),
     hersteller: String(resolveColumn(r, 'Hersteller', 'hersteller') ?? '').trim(),
     imZulauf: String(resolveColumn(r, 'Im Zulauf', 'im Zulauf', 'ImZulauf', 'Zulauf') ?? '').trim(),
-    bestandGesamt: numZero(resolveColumn(r, 'Bestand Gesamt', 'BestandGesamt', 'Gesamt')),
-    bestandKG: (() => { const v = resolveColumn(r, 'Bestand KG', 'BestandKG', 'Lager KG'); return v !== undefined && v !== '' ? numZero(v) : null; })(),
-    bestandNG: numZero(resolveColumn(r, 'Bestand NG', 'BestandNG', 'Lager NG')),
+    bestandGesamt: numZero(resolveColumn(r, 'Lagerbestand Gesamt', 'Bestand Gesamt', 'BestandGesamt', 'Gesamt')),
+    bestandKG: (() => { const v = resolveColumn(r, 'Lagerbestand Lager [KG-Store]', 'Bestand KG', 'BestandKG', 'Lager KG'); return v !== undefined && v !== '' ? numZero(v) : null; })(),
+    bestandNG: numZero(resolveColumn(r, 'Lagerbestand Lager [WMS_HFK]', 'Bestand NG', 'BestandNG', 'Lager NG')),
   }));
   return { rows: jtlRows, headers };
+}
+
+export async function parseLagerFile(file: File): Promise<Map<string, LagerEntry>> {
+  const { rows } = await readTable(file);
+  const map = new Map<string, LagerEntry>();
+  for (const r of rows) {
+    const key = String(resolveColumn(r, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel') ?? '').trim();
+    if (!key) continue;
+    if (map.has(key)) continue;
+    map.set(key, {
+      lagerplatz: String(resolveColumn(r, 'Lagerplatz', 'lagerplatz') ?? '').trim(),
+      kommentar: String(resolveColumn(r, 'Kommentar', 'kommentar', 'Comment') ?? '').trim(),
+    });
+  }
+  return map;
 }
 
 export async function getColumnHeaders(file: File): Promise<string[]> {

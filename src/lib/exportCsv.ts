@@ -1,4 +1,4 @@
-import type { ComparisonResultRow, UnmatchedJTLRow, UnmatchedRow } from './types';
+import type { ComparisonResultRow, UnmatchedJTLRow, UnmatchedRow, LagerEntry } from './types';
 
 function formatNum(n: number | null): string {
   if (n === null) return '';
@@ -17,7 +17,7 @@ function toCsvLine(values: string[]): string {
 }
 
 function downloadCsv(content: string, filename: string) {
-  const BOM = '\uFEFF';
+  const BOM = '﻿';
   const blob = new Blob([BOM + content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -80,38 +80,48 @@ function exportBestandGt0(
   getStock: (r: ComparisonResultRow) => number | null,
   stockLabel: string,
   filename: string,
+  lagerMap?: Map<string, LagerEntry>,
 ) {
   const filtered = rows.filter(r => r.changedVK && (getStock(r) ?? 0) > 0);
   const idLabel = rows.length > 0 && rows[0].identifierType === 'EAN' ? 'Barcode' : 'HAN';
-  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel, 'Lieferant']);
-  const lines = filtered.map(r => toCsvLine([
-    r.internerSchluessel,
-    r.artikelnummer,
-    r.identifier,
-    formatNum(r.newVK),
-    formatNum(r.oldVK),
-    String(getStock(r) ?? ''),
-    r.lieferant,
-  ]));
+  const extraHeaders = lagerMap ? ['Lagerplatz', 'Kommentar'] : [];
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'New VK', 'Old VK', stockLabel, ...extraHeaders, 'Lieferant']);
+  const lines = filtered.map(r => {
+    const lager = lagerMap?.get(r.internerSchluessel);
+    const extraValues = lagerMap ? [lager?.lagerplatz ?? '', lager?.kommentar ?? ''] : [];
+    return toCsvLine([
+      r.internerSchluessel,
+      r.artikelnummer,
+      r.identifier,
+      formatNum(r.newVK),
+      formatNum(r.oldVK),
+      String(getStock(r) ?? ''),
+      ...extraValues,
+      r.lieferant,
+    ]);
+  });
   downloadCsv([header, ...lines].join('\n'), filename);
 }
 
-export function exportBestandNGgt0(rows: ComparisonResultRow[]) {
-  exportBestandGt0(rows, r => r.bestandNG, 'Lager Bestand NG', 'export_bestand_ng_gt_0.csv');
+export function exportBestandNGgt0(rows: ComparisonResultRow[], lagerMap?: Map<string, LagerEntry>) {
+  exportBestandGt0(rows, r => r.bestandNG, 'Lager Bestand NG', 'export_bestand_ng_gt_0.csv', lagerMap);
 }
 
-export function exportBestandKGgt0(rows: ComparisonResultRow[]) {
-  exportBestandGt0(rows, r => r.bestandKG, 'Lager Bestand KG', 'export_bestand_kg_gt_0.csv');
+export function exportBestandKGgt0(rows: ComparisonResultRow[], lagerMap?: Map<string, LagerEntry>) {
+  exportBestandGt0(rows, r => r.bestandKG, 'Lager Bestand KG', 'export_bestand_kg_gt_0.csv', lagerMap);
 }
 
-export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[]) {
+export function exportDCEan(unmatchedJTLRows: UnmatchedJTLRow[], identifierType: 'HAN' | 'EAN' = 'EAN') {
   if (unmatchedJTLRows.length === 0) return;
 
-  const header = toCsvLine(['Interner Schlüssel', 'Name', 'DC/OP', 'Ist Active', 'Lieferant']);
+  const idLabel = identifierType === 'EAN' ? 'Barcode' : 'HAN';
+  const header = toCsvLine(['Interner Schlüssel', 'Artikelnummer', idLabel, 'Name', 'DC/OP', 'Ist Active', 'Lieferant']);
   const lines = unmatchedJTLRows.map(r => {
     const isOP = r.bestandGesamt > 0;
     return toCsvLine([
       r.internerSchluessel,
+      r.artikelnummer,
+      r.identifier,
       'DC/OP',
       isOP ? 'OP' : '',
       isOP ? 'Y' : 'N',

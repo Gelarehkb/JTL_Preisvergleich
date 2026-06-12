@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { ComparisonResult } from '@/lib/comparison';
+import type { LagerEntry } from '@/lib/types';
 import { exportAllRows, exportChangedOnly, exportBestandNGgt0, exportBestandKGgt0, exportDCEan, exportNeuAnlegen } from '@/lib/exportCsv';
 import { Download, ArrowUpDown, Package, Warehouse, List, AlertTriangle, FileX, ChevronsUpDown, FilePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface ResultsPanelProps {
   result: ComparisonResult;
+  lagerMap?: Map<string, LagerEntry> | null;
 }
 
 function fmt(n: number | null): string {
@@ -15,7 +17,7 @@ function fmt(n: number | null): string {
 
 const PREVIEW_LIMIT = 10;
 
-export function ResultsPanel({ result }: ResultsPanelProps) {
+export function ResultsPanel({ result, lagerMap }: ResultsPanelProps) {
   const { rows, unmatchedRows, unmatchedJTLRows, matchedCount, unmatchedCount } = result;
   const [showAll, setShowAll] = useState(false);
 
@@ -36,9 +38,9 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
   const exports = [
     { label: 'Alle Zeilen', icon: List, count: rows.length, onClick: () => exportAllRows(rows), disabled: rows.length === 0 },
     { label: 'Nur Änderungen', icon: ArrowUpDown, count: changedRows.length, onClick: () => exportChangedOnly(rows), disabled: changedRows.length === 0 },
-    { label: 'Bestand NG > 0', icon: Package, count: bestandNGgt0Count, onClick: () => exportBestandNGgt0(rows), disabled: bestandNGgt0Count === 0 },
-    { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows), disabled: bestandKGgt0Count === 0 },
-    { label: 'DC/EAN', icon: FileX, count: dcEanCount, onClick: () => exportDCEan(unmatchedJTLRows), disabled: dcEanCount === 0 },
+    { label: 'Bestand NG > 0', icon: Package, count: bestandNGgt0Count, onClick: () => exportBestandNGgt0(rows, lagerMap ?? undefined), disabled: bestandNGgt0Count === 0 },
+    { label: 'Bestand KG > 0', icon: Warehouse, count: bestandKGgt0Count, onClick: () => exportBestandKGgt0(rows, lagerMap ?? undefined), disabled: bestandKGgt0Count === 0 },
+    { label: 'DC/EAN', icon: FileX, count: dcEanCount, onClick: () => exportDCEan(unmatchedJTLRows, rows[0]?.identifierType ?? 'EAN'), disabled: dcEanCount === 0 },
     { label: 'Neu anlegen', icon: FilePlus, count: unmatchedRows.filter(r => r.rawRow).length, onClick: () => exportNeuAnlegen(unmatchedRows), disabled: unmatchedRows.filter(r => r.rawRow).length === 0 },
   ];
 
@@ -101,6 +103,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">VK Diff.</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">Bestand NG</th>
                   <th className="px-3 py-2 text-right font-medium text-muted-foreground">Bestand KG</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Lieferant</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,6 +124,7 @@ export function ResultsPanel({ result }: ResultsPanelProps) {
                       </td>
                       <td className="px-3 py-2 text-right font-mono">{r.bestandNG}</td>
                       <td className="px-3 py-2 text-right font-mono">{r.bestandKG !== null ? r.bestandKG : '–'}</td>
+                      <td className="px-3 py-2 font-mono text-muted-foreground">{r.lieferant || '–'}</td>
                     </tr>
                   );
                 })}

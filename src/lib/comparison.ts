@@ -171,6 +171,7 @@ export function compareItems(
       // The identifier (EAN/HAN) is always available as the map key
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
+        artikelnummer: jtl.artikelnummer,
         identifier: key,
         lieferant: jtl.lieferant,
         bestandKG: jtl.bestandKG,

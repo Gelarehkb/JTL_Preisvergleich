@@ -1,5 +1,10 @@
 export type IdentifierType = 'HAN' | 'EAN';
 
+export interface LagerEntry {
+  lagerplatz: string;
+  kommentar: string;
+}
+
 export interface NewPriceRow {
   sku: string;
   /** null = no update provided (not "invalid") */
@@ -61,6 +66,7 @@ export interface UnmatchedRow {
 /** A JTL row that was NOT matched by any input row */
 export interface UnmatchedJTLRow {
   internerSchluessel: string;
+  artikelnummer: string;
   identifier: string;
   lieferant: string;
   bestandKG: number | null;
