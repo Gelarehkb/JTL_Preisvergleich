@@ -28,6 +28,17 @@ function normalizeKey(value: string, identifierType: IdentifierType): string {
   return value.trim();
 }
 
+/**
+ * Normalize HAN for fallback matching by removing trailing status markers
+ * like "OP" / "DC". Exact HAN match is always preferred first.
+ */
+function normalizeHanFallbackKey(value: string): string {
+  return value
+    .trim()
+    .replace(/(?:\s+(?:OP|DC))+\s*$/i, '')
+    .trim();
+}
+
 // Round to 2dp before comparing — prices are always displayed at 2dp and XLSX
 // floats can carry sub-cent noise (e.g. 554.1199999...) that must be ignored.
 const DP = 2;
@@ -55,6 +66,8 @@ export function compareItems(
   // ── Step 1: Build lookup map with strict duplicate detection ──
   const jtlMap = new Map<string, JTLRow>();
   const keyCounts = new Map<string, number>();
+  const fallbackKeyCounts = new Map<string, number>();
+  const fallbackKeyFirstRow = new Map<string, JTLRow>();
 
   for (const row of jtlRows) {
     const rawKey = identifierType === 'HAN' ? row.han : row.eanBarcode;
@@ -66,6 +79,28 @@ export function compareItems(
 
     if (!jtlMap.has(key)) {
       jtlMap.set(key, row);
+    }
+
+    if (identifierType === 'HAN') {
+      const fallbackKey = normalizeHanFallbackKey(key);
+      if (!fallbackKey) continue;
+      fallbackKeyCounts.set(fallbackKey, (fallbackKeyCounts.get(fallbackKey) ?? 0) + 1);
+      if (!fallbackKeyFirstRow.has(fallbackKey)) {
+        fallbackKeyFirstRow.set(fallbackKey, row);
+      }
+    }
+  }
+
+  // Build fallback HAN map: prefer unique matches, but for ambiguous base HANs
+  // (e.g. both "1234 OP" and "1234 DC" exist) still return the first row rather
+  // than leaving the new-price entry unmatched. A warning is emitted below.
+  const hanFallbackMap = new Map<string, JTLRow>();
+  const ambiguousFallbackKeys: string[] = [];
+  if (identifierType === 'HAN') {
+    for (const [key, count] of fallbackKeyCounts) {
+      const row = fallbackKeyFirstRow.get(key);
+      if (row) hanFallbackMap.set(key, row);
+      if (count > 1) ambiguousFallbackKeys.push(key);
     }
   }
 
@@ -84,13 +119,32 @@ export function compareItems(
     );
   }
 
+  if (ambiguousFallbackKeys.length > 0) {
+    console.warn(
+      `[compareItems] Mehrdeutige HAN-Basiswerte für OP/DC-Fallback gefunden. Fallback für diese Schlüssel übersprungen.`,
+      `totalAmbiguousFallbackKeys: ${ambiguousFallbackKeys.length}`,
+      `first 10:`, ambiguousFallbackKeys.slice(0, 10)
+    );
+  }
+
   // ── Step 2: Match and compare ──
   const rows: ComparisonResultRow[] = [];
   const unmatchedRows: UnmatchedRow[] = [];
+  const matchedJTLInternerSchluessel = new Set<string>();
+
+  const resolveJTLMatch = (sku: string): JTLRow | undefined => {
+    const key = normalizeKey(sku, identifierType);
+    const exact = jtlMap.get(key);
+    if (exact) return exact;
+
+    if (identifierType !== 'HAN') return undefined;
+    const fallbackKey = normalizeHanFallbackKey(key);
+    if (!fallbackKey) return undefined;
+    return hanFallbackMap.get(fallbackKey);
+  };
 
   for (const np of newPrices) {
-    const key = normalizeKey(np.sku, identifierType);
-    const jtl = jtlMap.get(key);
+    const jtl = resolveJTLMatch(np.sku);
 
     if (!jtl) {
       unmatchedRows.push({
@@ -101,6 +155,8 @@ export function compareItems(
       });
       continue;
     }
+
+    matchedJTLInternerSchluessel.add(jtl.internerSchluessel);
 
     // EK comparison
     const oldEK = jtl.ekNettoLieferant;
@@ -158,15 +214,9 @@ export function compareItems(
   }
 
   // ── Step 3: Collect unmatched JTL rows ──
-  const matchedKeys = new Set<string>();
-  for (const np of newPrices) {
-    const key = normalizeKey(np.sku, identifierType);
-    if (jtlMap.has(key)) matchedKeys.add(key);
-  }
-
   const unmatchedJTLRows: UnmatchedJTLRow[] = [];
   for (const [key, jtl] of jtlMap) {
-    if (!matchedKeys.has(key)) {
+    if (!matchedJTLInternerSchluessel.has(jtl.internerSchluessel)) {
       unmatchedJTLRows.push({
         internerSchluessel: jtl.internerSchluessel,
         artikelnummer: jtl.artikelnummer,
