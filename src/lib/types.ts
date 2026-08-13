@@ -14,6 +14,8 @@ export interface NewPriceRow {
   newVK: number | null;
   /** Original CSV row — present when imported from a file, absent for manual entries */
   rawRow?: Record<string, string>;
+  /** Name of the rawRow column that holds the EK value — lets exports overwrite it with the discounted EK */
+  ekColumnName?: string;
 }
 
 export interface JTLRow {
@@ -62,6 +64,8 @@ export interface UnmatchedRow {
   newEK: number | null;
   newVK: number | null;
   rawRow?: Record<string, string>;
+  /** Name of the rawRow column that holds the EK value — lets exports overwrite it with the discounted EK */
+  ekColumnName?: string;
 }
 
 /** A JTL row that was NOT matched by any input row */

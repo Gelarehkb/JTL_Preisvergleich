@@ -6,6 +6,7 @@ import { ColumnMapper } from '@/components/ColumnMapper';
 import { PreviewTable } from '@/components/PreviewTable';
 import { parseJTL, parseNewPrices, parseLagerFile, getPreviewData, type PreviewData } from '@/lib/parseFiles';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
+import { parseDiscountPercent, applyEkDiscount } from '@/lib/discount';
 import type { IdentifierType, NewPriceRow, LagerEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { ArrowRightLeft, BarChart3 } from 'lucide-react';
@@ -38,6 +39,25 @@ function createInitialRows(): TableRow[] {
   }));
 }
 
+function DiscountInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="0"
+          className="w-16 rounded-md border bg-card px-2 py-1 text-right text-xs font-mono outline-none focus:ring-1 focus:ring-primary"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="text-xs text-muted-foreground">%</span>
+      </div>
+    </div>
+  );
+}
+
 type CsvSlot = 1 | 2;
 
 const Index = () => {
@@ -53,6 +73,10 @@ const Index = () => {
   const [newPriceCsvFile2, setNewPriceCsvFile2] = useState<File | null>(null);
   const [slotRows1, setSlotRows1] = useState<NewPriceRow[] | null>(null);
   const [slotRows2, setSlotRows2] = useState<NewPriceRow[] | null>(null);
+  const [ekMetaMap, setEkMetaMap] = useState<Map<string, { origin: 1 | 2; ekColumnName?: string }>>(new Map());
+  const [discount1, setDiscount1] = useState('');
+  const [discount2, setDiscount2] = useState('');
+  const [discountManual, setDiscountManual] = useState('');
   const [pendingCsvFile, setPendingCsvFile] = useState<File | null>(null);
   const [pendingSlot, setPendingSlot] = useState<CsvSlot>(1);
   const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
@@ -64,35 +88,46 @@ const Index = () => {
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
-  /** Merge rows from up to two slots by identifier; first non-null wins per field. */
-  const mergeSlots = useCallback((a: NewPriceRow[] | null, b: NewPriceRow[] | null): NewPriceRow[] => {
+  /**
+   * Merge rows from up to two slots by identifier; first non-null wins per field.
+   * Also tracks which slot's EK value actually won for each identifier, since
+   * slot 1 and slot 2 can be different brands with different EK discounts.
+   */
+  const mergeSlotsWithOrigin = useCallback((a: NewPriceRow[] | null, b: NewPriceRow[] | null) => {
     const map = new Map<string, NewPriceRow>();
+    const ekOrigin = new Map<string, 1 | 2>();
     const order: string[] = [];
-    const add = (rows: NewPriceRow[] | null) => {
+    const add = (rows: NewPriceRow[] | null, slot: 1 | 2) => {
       if (!rows) return;
       for (const r of rows) {
         const key = r.sku.trim().toLowerCase();
         if (!key) continue;
         const existing = map.get(key);
         if (!existing) {
-          map.set(key, { sku: r.sku, newEK: r.newEK, newVK: r.newVK, rawRow: r.rawRow });
+          map.set(key, { sku: r.sku, newEK: r.newEK, newVK: r.newVK, rawRow: r.rawRow, ekColumnName: r.ekColumnName });
           order.push(key);
+          if (r.newEK !== null) ekOrigin.set(key, slot);
         } else {
-          if (existing.newEK === null && r.newEK !== null) existing.newEK = r.newEK;
+          if (existing.newEK === null && r.newEK !== null) {
+            existing.newEK = r.newEK;
+            existing.ekColumnName = r.ekColumnName;
+            ekOrigin.set(key, slot);
+          }
           if (existing.newVK === null && r.newVK !== null) existing.newVK = r.newVK;
           if (!existing.rawRow && r.rawRow) existing.rawRow = r.rawRow;
         }
       }
     };
-    add(a);
-    add(b);
-    return order.map(k => map.get(k)!);
+    add(a, 1);
+    add(b, 2);
+    return { rows: order.map(k => map.get(k)!), ekOrigin };
   }, []);
 
-  const applyMerged = useCallback((merged: NewPriceRow[]) => {
+  const applyMerged = useCallback((merged: NewPriceRow[], ekOrigin: Map<string, 1 | 2>) => {
     if (merged.length === 0) {
       setTableRows(createInitialRows());
       setRawRowMap(new Map());
+      setEkMetaMap(new Map());
       setResult(null);
       return;
     }
@@ -103,9 +138,16 @@ const Index = () => {
       newVK: r.newVK !== null ? String(r.newVK).replace('.', ',') : '',
     }));
     const newRawMap = new Map<string, Record<string, string>>();
-    merged.forEach(r => { if (r.rawRow) newRawMap.set(r.sku.trim().toLowerCase(), r.rawRow); });
+    const newEkMetaMap = new Map<string, { origin: 1 | 2; ekColumnName?: string }>();
+    merged.forEach(r => {
+      const key = r.sku.trim().toLowerCase();
+      if (r.rawRow) newRawMap.set(key, r.rawRow);
+      const origin = ekOrigin.get(key);
+      if (origin) newEkMetaMap.set(key, { origin, ekColumnName: r.ekColumnName });
+    });
     setTableRows(imported);
     setRawRowMap(newRawMap);
+    setEkMetaMap(newEkMetaMap);
     setResult(null);
   }, []);
 
@@ -120,14 +162,14 @@ const Index = () => {
       let next2 = slotRows2;
       if (slot === 1) { next1 = parsed; setSlotRows1(parsed); setNewPriceCsvFile1(file); }
       else { next2 = parsed; setSlotRows2(parsed); setNewPriceCsvFile2(file); }
-      const merged = mergeSlots(next1, next2);
-      applyMerged(merged);
+      const { rows: merged, ekOrigin } = mergeSlotsWithOrigin(next1, next2);
+      applyMerged(merged, ekOrigin);
       const dualMsg = next1 && next2 ? ` (${merged.length} nach Zusammenführung)` : '';
       toast.success(`${parsed.length} Zeilen importiert${dualMsg}`);
     } catch (err) {
       toast.error('CSV Fehler: ' + (err as Error).message);
     }
-  }, [slotRows1, slotRows2, mergeSlots, applyMerged]);
+  }, [slotRows1, slotRows2, mergeSlotsWithOrigin, applyMerged]);
 
   /** Open column-mapping dialog whenever a price-list CSV is uploaded */
   const handleNewPriceCsv = useCallback(async (file: File, slot: CsvSlot) => {
@@ -170,20 +212,28 @@ const Index = () => {
     let next2 = slotRows2;
     if (slot === 1) { next1 = null; setSlotRows1(null); setNewPriceCsvFile1(null); }
     else { next2 = null; setSlotRows2(null); setNewPriceCsvFile2(null); }
-    const merged = mergeSlots(next1, next2);
-    applyMerged(merged);
-  }, [slotRows1, slotRows2, mergeSlots, applyMerged]);
+    const { rows: merged, ekOrigin } = mergeSlotsWithOrigin(next1, next2);
+    applyMerged(merged, ekOrigin);
+  }, [slotRows1, slotRows2, mergeSlotsWithOrigin, applyMerged]);
 
   const handleCompare = useCallback(async () => {
     if (filledRows.length === 0 || !jtlFile) return;
     setLoading(true);
     try {
-      const newPrices: NewPriceRow[] = filledRows.map(r => ({
-        sku: r.identifier.trim(),
-        newEK: parseNumber(r.newEK),
-        newVK: parseNumber(r.newVK),
-        rawRow: rawRowMap.get(r.identifier.trim().toLowerCase()),
-      }));
+      const newPrices: NewPriceRow[] = filledRows.map(r => {
+        const key = r.identifier.trim().toLowerCase();
+        const meta = ekMetaMap.get(key);
+        const discountPercent = parseDiscountPercent(
+          meta?.origin === 1 ? discount1 : meta?.origin === 2 ? discount2 : discountManual
+        );
+        return {
+          sku: r.identifier.trim(),
+          newEK: applyEkDiscount(parseNumber(r.newEK), discountPercent),
+          newVK: parseNumber(r.newVK),
+          rawRow: rawRowMap.get(key),
+          ekColumnName: meta?.ekColumnName,
+        };
+      });
 
       const { rows: jtlRows } = await parseJTL(jtlFile);
       const res = compareItems(newPrices, jtlRows, identifierType);
@@ -198,7 +248,7 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
-  }, [filledRows, jtlFile, identifierType]);
+  }, [filledRows, jtlFile, identifierType, ekMetaMap, discount1, discount2, discountManual, rawRowMap]);
 
   const canCompare = filledRows.length > 0 && jtlFile;
 
@@ -285,22 +335,50 @@ const Index = () => {
           <p className="text-xs text-muted-foreground">
             Eine Datei mit EK & VK – oder zwei Dateien, die per {identifierType} zusammengeführt werden.
           </p>
+          <p className="text-xs text-muted-foreground">
+            EK-Rabatt (z.B. 20% → EK × 0,8) wird auf den neuen EK je Quelle angerechnet – für den Preisvergleich und für neu anzulegende Artikel. Der JTL-Export bleibt davon unberührt.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <FileUploadZone
-              label="Preisliste 1"
-              description={`CSV/XLSX mit ${identifierType} + EK und/oder VK`}
-              accept=".csv,.xlsx,.xls"
-              file={newPriceCsvFile1}
-              onFile={(f) => handleNewPriceCsv(f, 1)}
-              onClear={() => clearSlot(1)}
-            />
-            <FileUploadZone
-              label="Preisliste 2 (optional)"
-              description={`Zweite Datei – wird per ${identifierType} mit Preisliste 1 zusammengeführt`}
-              accept=".csv,.xlsx,.xls"
-              file={newPriceCsvFile2}
-              onFile={(f) => handleNewPriceCsv(f, 2)}
-              onClear={() => clearSlot(2)}
+            <div className="space-y-2">
+              <FileUploadZone
+                label="Preisliste 1"
+                description={`CSV/XLSX mit ${identifierType} + EK und/oder VK`}
+                accept=".csv,.xlsx,.xls"
+                file={newPriceCsvFile1}
+                onFile={(f) => handleNewPriceCsv(f, 1)}
+                onClear={() => clearSlot(1)}
+              />
+              <DiscountInput
+                label="EK-Rabatt Preisliste 1"
+                value={discount1}
+                onChange={(v) => { setDiscount1(v); setResult(null); }}
+              />
+            </div>
+            <div className="space-y-2">
+              <FileUploadZone
+                label="Preisliste 2 (optional)"
+                description={`Zweite Datei – wird per ${identifierType} mit Preisliste 1 zusammengeführt`}
+                accept=".csv,.xlsx,.xls"
+                file={newPriceCsvFile2}
+                onFile={(f) => handleNewPriceCsv(f, 2)}
+                onClear={() => clearSlot(2)}
+              />
+              <DiscountInput
+                label="EK-Rabatt Preisliste 2"
+                value={discount2}
+                onChange={(v) => { setDiscount2(v); setResult(null); }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-xs text-muted-foreground">
+              Manuell eingegebene/eingefügte Zeilen (keine Preisliste-Datei):
+            </p>
+            <DiscountInput
+              label="EK-Rabatt manuelle Zeilen"
+              value={discountManual}
+              onChange={(v) => { setDiscountManual(v); setResult(null); }}
             />
           </div>
 

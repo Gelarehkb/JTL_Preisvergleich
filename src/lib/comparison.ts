@@ -30,12 +30,15 @@ function normalizeKey(value: string, identifierType: IdentifierType): string {
 
 /**
  * Normalize HAN for fallback matching by removing trailing status markers
- * like "OP" / "DC". Exact HAN match is always preferred first.
+ * like "OP" / "DC" / "NA". Exact HAN match is always preferred first — this
+ * is only used when no exact match exists, so a discontinued/relabeled row
+ * (e.g. "1234 OP") still matches an incoming "1234" instead of being treated
+ * as a brand-new item.
  */
 function normalizeHanFallbackKey(value: string): string {
   return value
     .trim()
-    .replace(/(?:\s+(?:OP|DC))+\s*$/i, '')
+    .replace(/(?:[\s\-_]+(?:OP|DC|NA))+\s*$/i, '')
     .trim();
 }
 
@@ -121,7 +124,7 @@ export function compareItems(
 
   if (ambiguousFallbackKeys.length > 0) {
     console.warn(
-      `[compareItems] Mehrdeutige HAN-Basiswerte für OP/DC-Fallback gefunden. Fallback für diese Schlüssel übersprungen.`,
+      `[compareItems] Mehrdeutige HAN-Basiswerte für OP/DC/NA-Fallback gefunden. Fallback für diese Schlüssel übersprungen.`,
       `totalAmbiguousFallbackKeys: ${ambiguousFallbackKeys.length}`,
       `first 10:`, ambiguousFallbackKeys.slice(0, 10)
     );
@@ -152,6 +155,7 @@ export function compareItems(
         newEK: np.newEK,
         newVK: np.newVK,
         rawRow: np.rawRow,
+        ekColumnName: np.ekColumnName,
       });
       continue;
     }

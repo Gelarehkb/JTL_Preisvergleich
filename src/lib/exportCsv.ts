@@ -142,7 +142,13 @@ function buildNeuAnlegen(unmatchedRows: UnmatchedRow[]): { content: string; file
   const withRaw = unmatchedRows.filter(r => r.rawRow && Object.keys(r.rawRow).length > 0);
   if (withRaw.length === 0) return null;
   const headers = Object.keys(withRaw[0].rawRow!);
-  const lines = [toCsvLine(headers), ...withRaw.map(r => toCsvLine(headers.map(h => r.rawRow![h] ?? '')))];
+  const lines = [toCsvLine(headers), ...withRaw.map(r => {
+    // newEK already has any EK discount applied — overwrite the original (un-discounted) column
+    const row = r.ekColumnName && r.newEK !== null
+      ? { ...r.rawRow!, [r.ekColumnName]: formatNum(r.newEK) }
+      : r.rawRow!;
+    return toCsvLine(headers.map(h => row[h] ?? ''));
+  })];
   return { content: lines.join('\n'), filename: 'export_neu_anlegen.csv' };
 }
 
