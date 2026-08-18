@@ -295,7 +295,16 @@ const Index = () => {
               description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
               accept=".csv"
               file={jtlFile}
-              onFile={(f) => { setJtlFile(f); setResult(null); }}
+              onFile={async (f) => {
+                setJtlFile(f);
+                setResult(null);
+                try {
+                  const { formatLabel } = await parseJTL(f);
+                  toast.success(`Format erkannt: ${formatLabel}`);
+                } catch (err) {
+                  toast.error('JTL Export Fehler: ' + (err as Error).message);
+                }
+              }}
               onClear={() => { setJtlFile(null); setResult(null); }}
             />
             <FileUploadZone

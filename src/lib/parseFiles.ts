@@ -1,6 +1,8 @@
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import type { NewPriceRow, JTLRow, LagerEntry } from './types';
+import { normalizeHeader, resolveColumn } from './headerUtils';
+import { detectJTLFormat, resolveJTLField, assertJTLColumnsPresent } from './jtlFormats';
 
 /* ============================================================
  * Auto-detection: separator (; , \t |) and decimal mark (, .)
@@ -61,10 +63,6 @@ function parseNumberOrZero(val: unknown, decimal: '.' | ',' = ','): number {
   return parseNumberSmart(val, decimal) ?? 0;
 }
 
-function normalizeHeader(s: string): string {
-  return s.replace(/^\uFEFF/, '').replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
 /** Normalize an Interner Schl\u00FCssel value to a consistent string key.
  *  Handles: BOM, whitespace, Excel float representation (158279.0 \u2192 "158279"). */
 export function normalizeSchluessel(val: unknown): string {
@@ -72,21 +70,6 @@ export function normalizeSchluessel(val: unknown): string {
   const s = String(val).replace(/^\uFEFF/, '').trim();
   // Strip .0 / .00 suffix from Excel numeric cells (e.g. "158279.0" \u2192 "158279")
   return s.replace(/\.0+$/, '');
-}
-
-function resolveColumn(row: Record<string, unknown>, ...names: string[]): unknown {
-  for (const name of names) {
-    if (row[name] !== undefined && row[name] !== '') return row[name];
-  }
-  // Fallback: case/whitespace/BOM-insensitive lookup
-  const wanted = names.map(normalizeHeader);
-  for (const key of Object.keys(row)) {
-    if (wanted.includes(normalizeHeader(key))) {
-      const v = row[key];
-      if (v !== undefined && v !== '') return v;
-    }
-  }
-  return undefined;
 }
 
 /* ============================================================
@@ -156,31 +139,39 @@ export async function parseNewPrices(
     }));
 }
 
-export async function parseJTL(file: File): Promise<{ rows: JTLRow[]; headers: string[] }> {
+export async function parseJTL(
+  file: File
+): Promise<{ rows: JTLRow[]; headers: string[]; formatId: string; formatLabel: string }> {
   const { rows, headers, decimal } = await readTable(file);
   const num = (v: unknown) => parseNumberSmart(v, decimal);
   const numZero = (v: unknown) => num(v) ?? 0;
+
+  assertJTLColumnsPresent(headers);
+  const format = detectJTLFormat(headers);
+  const field = (row: Record<string, unknown>, name: Parameters<typeof resolveJTLField>[1]) =>
+    resolveJTLField(row, name, format);
+
   const internerSchluesselColumn =
     headers.find(h => normalizeHeader(h) === normalizeHeader('Interner Schlüssel'))
     ?? headers[0]
     ?? 'Interner Schlüssel';
   const jtlRows: JTLRow[] = rows.map(r => ({
-    internerSchluessel: normalizeSchluessel(resolveColumn(r, internerSchluesselColumn, 'Interner Schlüssel', 'interner Schlüssel', 'Interner Schluessel', 'interner Schluessel', 'Interner schlüssel')),
-    artikelnummer: String(resolveColumn(r, 'Artikelnummer', 'artikelnummer', 'Artikel-Nr', 'ArtikelNr') ?? '').trim(),
-    eanBarcode: String(resolveColumn(r, 'EAN/Barcode', 'EAN Barcode', 'EAN', 'Barcode') ?? '').trim(),
-    han: String(resolveColumn(r, 'HAN', 'han', 'Hersteller-Artikelnummer') ?? '').trim(),
-    artikelname: String(resolveColumn(r, 'Artikelname', 'artikelname', 'Name') ?? '').trim(),
-    ekNettoLieferant: num(resolveColumn(r, 'Netto-EK', 'EK netto [Lieferant]', 'EK netto Lieferant', 'EK Netto', 'EK netto', 'EK')),
-    vkBrutto: num(resolveColumn(r, 'Std. VK Brutto', 'VK brutto', 'VK Brutto', 'VK')),
-    lieferant: String(resolveColumn(r, 'Lieferant', 'lieferant', 'Lieferantenname', 'Supplier') ?? '').trim(),
-    warengruppe: String(resolveColumn(r, 'Warengruppe', 'warengruppe') ?? '').trim(),
-    hersteller: String(resolveColumn(r, 'Hersteller', 'hersteller') ?? '').trim(),
-    imZulauf: String(resolveColumn(r, 'Im Zulauf', 'im Zulauf', 'ImZulauf', 'Zulauf') ?? '').trim(),
-    bestandGesamt: numZero(resolveColumn(r, 'Lagerbestand Gesamt', 'Bestand Gesamt', 'BestandGesamt', 'Gesamt')),
-    bestandKG: (() => { const v = resolveColumn(r, 'Lagerbestand Lager [KG-Store]', 'Bestand KG', 'BestandKG', 'Lager KG'); return v !== undefined && v !== '' ? numZero(v) : null; })(),
-    bestandNG: numZero(resolveColumn(r, 'Lagerbestand Lager [WMS_HFK]', 'Bestand NG', 'BestandNG', 'Lager NG')),
+    internerSchluessel: normalizeSchluessel(resolveColumn(r, internerSchluesselColumn, ...format.columns.internerSchluessel)),
+    artikelnummer: String(field(r, 'artikelnummer') ?? '').trim(),
+    eanBarcode: String(field(r, 'eanBarcode') ?? '').trim(),
+    han: String(field(r, 'han') ?? '').trim(),
+    artikelname: String(field(r, 'artikelname') ?? '').trim(),
+    ekNettoLieferant: num(field(r, 'ekNettoLieferant')),
+    vkBrutto: num(field(r, 'vkBrutto')),
+    lieferant: String(field(r, 'lieferant') ?? '').trim(),
+    warengruppe: String(field(r, 'warengruppe') ?? '').trim(),
+    hersteller: String(field(r, 'hersteller') ?? '').trim(),
+    imZulauf: String(field(r, 'imZulauf') ?? '').trim(),
+    bestandGesamt: numZero(field(r, 'bestandGesamt')),
+    bestandKG: (() => { const v = field(r, 'bestandKG'); return v !== undefined && v !== '' ? numZero(v) : null; })(),
+    bestandNG: numZero(field(r, 'bestandNG')),
   }));
-  return { rows: jtlRows, headers };
+  return { rows: jtlRows, headers, formatId: format.id, formatLabel: format.label };
 }
 
 export async function parseLagerFile(file: File): Promise<Map<string, LagerEntry>> {
