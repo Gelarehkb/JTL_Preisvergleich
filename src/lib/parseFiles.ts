@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import type { NewPriceRow, JTLRow, LagerEntry } from './types';
 import { normalizeHeader, resolveColumn } from './headerUtils';
-import { detectJTLFormat, resolveJTLField, assertJTLColumnsPresent } from './jtlFormats';
+import { detectJTLFormat, resolveJTLField, assertJTLColumnsPresent, type JTLColumnOverrides } from './jtlFormats';
 
 /* ============================================================
  * Auto-detection: separator (; , \t |) and decimal mark (, .)
@@ -140,16 +140,20 @@ export async function parseNewPrices(
 }
 
 export async function parseJTL(
-  file: File
+  file: File,
+  overrides: JTLColumnOverrides = {}
 ): Promise<{ rows: JTLRow[]; headers: string[]; formatId: string; formatLabel: string }> {
   const { rows, headers, decimal } = await readTable(file);
   const num = (v: unknown) => parseNumberSmart(v, decimal);
   const numZero = (v: unknown) => num(v) ?? 0;
 
-  assertJTLColumnsPresent(headers);
+  assertJTLColumnsPresent(headers, overrides);
   const format = detectJTLFormat(headers);
-  const field = (row: Record<string, unknown>, name: Parameters<typeof resolveJTLField>[1]) =>
-    resolveJTLField(row, name, format);
+  const field = (
+    row: Record<string, unknown>,
+    name: Parameters<typeof resolveJTLField>[1],
+    overrideColumn?: string
+  ) => resolveJTLField(row, name, format, overrideColumn);
 
   const internerSchluesselColumn =
     headers.find(h => normalizeHeader(h) === normalizeHeader('Interner Schlüssel'))
@@ -158,11 +162,11 @@ export async function parseJTL(
   const jtlRows: JTLRow[] = rows.map(r => ({
     internerSchluessel: normalizeSchluessel(resolveColumn(r, internerSchluesselColumn, ...format.columns.internerSchluessel)),
     artikelnummer: String(field(r, 'artikelnummer') ?? '').trim(),
-    eanBarcode: String(field(r, 'eanBarcode') ?? '').trim(),
-    han: String(field(r, 'han') ?? '').trim(),
+    eanBarcode: String(field(r, 'eanBarcode', overrides.eanBarcode) ?? '').trim(),
+    han: String(field(r, 'han', overrides.han) ?? '').trim(),
     artikelname: String(field(r, 'artikelname') ?? '').trim(),
-    ekNettoLieferant: num(field(r, 'ekNettoLieferant')),
-    vkBrutto: num(field(r, 'vkBrutto')),
+    ekNettoLieferant: num(field(r, 'ekNettoLieferant', overrides.ekNettoLieferant)),
+    vkBrutto: num(field(r, 'vkBrutto', overrides.vkBrutto)),
     lieferant: String(field(r, 'lieferant') ?? '').trim(),
     warengruppe: String(field(r, 'warengruppe') ?? '').trim(),
     hersteller: String(field(r, 'hersteller') ?? '').trim(),

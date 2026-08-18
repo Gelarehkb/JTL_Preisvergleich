@@ -21,6 +21,11 @@ const MISSING_PRICE_COLUMNS_CSV = [
   '3001;ART-4;Testartikel vier;HAN-4;4000000000004',
 ].join('\n');
 
+const UNKNOWN_HEADERS_CSV = [
+  'Interner Schlüssel;Artikelnummer;Artikelname;Herstellernummer;Barcode;Einkaufspreis;Verkaufspreis',
+  '4001;ART-5;Testartikel fünf;HAN-5;4000000000005;15,00;29,90',
+].join('\n');
+
 describe('parseJTL', () => {
   it('parses the standard JTL export format', async () => {
     const { rows, formatId } = await parseJTL(csvFile(STANDARD_CSV));
@@ -56,5 +61,22 @@ describe('parseJTL', () => {
 
   it('throws a clear error when EK/VK columns cannot be found in any known format', async () => {
     await expect(parseJTL(csvFile(MISSING_PRICE_COLUMNS_CSV))).rejects.toThrow(/EK, VK/);
+  });
+
+  it('rejects unrecognized EK/VK headers unless the user maps them manually', async () => {
+    const file = csvFile(UNKNOWN_HEADERS_CSV);
+    await expect(parseJTL(file)).rejects.toThrow(/EK, VK/);
+
+    const { rows } = await parseJTL(file, {
+      han: 'Herstellernummer',
+      ekNettoLieferant: 'Einkaufspreis',
+      vkBrutto: 'Verkaufspreis',
+    });
+    expect(rows[0]).toMatchObject({
+      han: 'HAN-5',
+      eanBarcode: '4000000000005',
+      ekNettoLieferant: 15,
+      vkBrutto: 29.9,
+    });
   });
 });

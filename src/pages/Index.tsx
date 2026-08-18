@@ -3,8 +3,10 @@ import { FileUploadZone } from '@/components/FileUploadZone';
 import { EditableTable, type TableRow } from '@/components/EditableTable';
 import { ResultsPanel } from '@/components/ResultsPanel';
 import { ColumnMapper } from '@/components/ColumnMapper';
+import { JtlColumnMapper } from '@/components/JtlColumnMapper';
 import { PreviewTable } from '@/components/PreviewTable';
 import { parseJTL, parseNewPrices, parseLagerFile, getPreviewData, type PreviewData } from '@/lib/parseFiles';
+import { suggestJTLColumns, type JTLColumnOverrides } from '@/lib/jtlFormats';
 import { compareItems, type ComparisonResult } from '@/lib/comparison';
 import { parseDiscountPercent, applyEkDiscount } from '@/lib/discount';
 import type { IdentifierType, NewPriceRow, LagerEntry } from '@/lib/types';
@@ -83,6 +85,16 @@ const Index = () => {
   const [mapEk, setMapEk] = useState('');
   const [mapVk, setMapVk] = useState('');
   const [showColumnDialog, setShowColumnDialog] = useState(false);
+  const [pendingJtlFile, setPendingJtlFile] = useState<File | null>(null);
+  const [jtlHeaders, setJtlHeaders] = useState<string[]>([]);
+  const [jtlPreview, setJtlPreview] = useState<PreviewData | null>(null);
+  const [jtlFormatLabel, setJtlFormatLabel] = useState('');
+  const [mapJtlEan, setMapJtlEan] = useState('');
+  const [mapJtlHan, setMapJtlHan] = useState('');
+  const [mapJtlEk, setMapJtlEk] = useState('');
+  const [mapJtlVk, setMapJtlVk] = useState('');
+  const [showJtlColumnDialog, setShowJtlColumnDialog] = useState(false);
+  const [jtlColumnOverrides, setJtlColumnOverrides] = useState<JTLColumnOverrides>({});
 
   const filledRows = tableRows.filter(r => r.identifier.trim() !== '');
 
@@ -197,6 +209,48 @@ const Index = () => {
     setPendingCsvFile(null);
   }, [pendingCsvFile, pendingSlot, mapSku, mapEk, mapVk, importCsvRows]);
 
+  /** Open column-mapping dialog whenever a JTL export is uploaded */
+  const handleJtlFile = useCallback(async (file: File) => {
+    try {
+      const preview = await getPreviewData(file, 20);
+      const headers = preview.headers;
+      if (headers.length < 1) {
+        toast.error('JTL Export enthält keine Spalten');
+        return;
+      }
+      const suggestion = suggestJTLColumns(headers);
+      setPendingJtlFile(file);
+      setJtlHeaders(headers);
+      setJtlPreview(preview);
+      setJtlFormatLabel(suggestion.formatLabel);
+      setMapJtlEan(suggestion.eanBarcode ?? '');
+      setMapJtlHan(suggestion.han ?? '');
+      setMapJtlEk(suggestion.ekNettoLieferant ?? '');
+      setMapJtlVk(suggestion.vkBrutto ?? '');
+      setShowJtlColumnDialog(true);
+    } catch (err) {
+      toast.error('JTL Export Fehler: ' + (err as Error).message);
+    }
+  }, []);
+
+  const handleConfirmJtlMapping = useCallback(() => {
+    if (!pendingJtlFile) return;
+    if (!mapJtlEan && !mapJtlHan) {
+      toast.error('Bitte mindestens EAN oder HAN Spalte zuordnen');
+      return;
+    }
+    if (!mapJtlEk || !mapJtlVk) {
+      toast.error('Bitte EK und VK Spalte zuordnen');
+      return;
+    }
+    setJtlColumnOverrides({ eanBarcode: mapJtlEan, han: mapJtlHan, ekNettoLieferant: mapJtlEk, vkBrutto: mapJtlVk });
+    setJtlFile(pendingJtlFile);
+    setResult(null);
+    setShowJtlColumnDialog(false);
+    setPendingJtlFile(null);
+    toast.success(`JTL Export übernommen (${jtlFormatLabel})`);
+  }, [pendingJtlFile, mapJtlEan, mapJtlHan, mapJtlEk, mapJtlVk, jtlFormatLabel]);
+
   const clearSlot = useCallback((slot: CsvSlot) => {
     let next1 = slotRows1;
     let next2 = slotRows2;
@@ -222,7 +276,7 @@ const Index = () => {
         };
       });
 
-      const { rows: jtlRows } = await parseJTL(jtlFile);
+      const { rows: jtlRows } = await parseJTL(jtlFile, jtlColumnOverrides);
       const res = compareItems(newPrices, jtlRows, identifierType);
       setResult(res);
       const changedCount = res.rows.filter(r => r.changedEK || r.changedVK).length;
@@ -235,7 +289,7 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
-  }, [filledRows, jtlFile, identifierType, ekColumnMap, ekDiscount, rawRowMap]);
+  }, [filledRows, jtlFile, jtlColumnOverrides, identifierType, ekColumnMap, ekDiscount, rawRowMap]);
 
   const canCompare = filledRows.length > 0 && jtlFile;
 
@@ -292,20 +346,11 @@ const Index = () => {
           <div className="grid gap-3 sm:grid-cols-2">
             <FileUploadZone
               label="JTL Export hochladen"
-              description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK…"
+              description="CSV mit Interner Schlüssel, HAN, EAN, EK, VK… Spalten werden erkannt und lassen sich anpassen"
               accept=".csv"
               file={jtlFile}
-              onFile={async (f) => {
-                setJtlFile(f);
-                setResult(null);
-                try {
-                  const { formatLabel } = await parseJTL(f);
-                  toast.success(`Format erkannt: ${formatLabel}`);
-                } catch (err) {
-                  toast.error('JTL Export Fehler: ' + (err as Error).message);
-                }
-              }}
-              onClear={() => { setJtlFile(null); setResult(null); }}
+              onFile={(f) => handleJtlFile(f)}
+              onClear={() => { setJtlFile(null); setResult(null); setJtlColumnOverrides({}); }}
             />
             <FileUploadZone
               label="JTL Lager Export (optional)"
@@ -406,6 +451,46 @@ const Index = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowColumnDialog(false); setPendingCsvFile(null); setPendingPreview(null); }}>Abbrechen</Button>
             <Button onClick={handleConfirmMapping} disabled={!mapSku || (!mapEk && !mapVk)}>Übernehmen</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* JTL column mapping dialog */}
+      <Dialog open={showJtlColumnDialog} onOpenChange={(open) => { if (!open) { setShowJtlColumnDialog(false); setPendingJtlFile(null); setJtlPreview(null); } }}>
+        <DialogContent className="max-w-[min(96vw,1100px)] sm:max-w-[min(96vw,1100px)] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>JTL Export – Spalten zuordnen</DialogTitle>
+            <DialogDescription>
+              Erkanntes Format: <strong>{jtlFormatLabel}</strong>. Wähle die Spalten für EAN, HAN, EK und VK — oder passe sie bei Bedarf an.
+              {jtlPreview && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  (Trennzeichen: <code>{jtlPreview.delimiter === '\t' ? '\\t' : jtlPreview.delimiter}</code>, Dezimal: <code>{jtlPreview.decimal}</code>)
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <JtlColumnMapper
+            headers={jtlHeaders}
+            eanColumn={mapJtlEan}
+            hanColumn={mapJtlHan}
+            ekColumn={mapJtlEk}
+            vkColumn={mapJtlVk}
+            onEanChange={setMapJtlEan}
+            onHanChange={setMapJtlHan}
+            onEkChange={setMapJtlEk}
+            onVkChange={setMapJtlVk}
+          />
+          {jtlPreview && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">
+                Vorschau (erste {jtlPreview.rows.length} Zeilen) — Spalten lassen sich am rechten Rand ziehen
+              </p>
+              <PreviewTable headers={jtlPreview.headers} rows={jtlPreview.rows} />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowJtlColumnDialog(false); setPendingJtlFile(null); setJtlPreview(null); }}>Abbrechen</Button>
+            <Button onClick={handleConfirmJtlMapping} disabled={(!mapJtlEan && !mapJtlHan) || !mapJtlEk || !mapJtlVk}>Übernehmen</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

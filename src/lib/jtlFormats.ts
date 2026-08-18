@@ -1,4 +1,4 @@
-import { headerListHasAny, resolveColumn } from './headerUtils';
+import { headerListHasAny, normalizeHeader, resolveColumn } from './headerUtils';
 
 /**
  * Registry of supported JTL export formats. Each format lists, per internal
@@ -27,6 +27,15 @@ export interface JTLFormatDefinition {
   id: string;
   label: string;
   columns: JTLFieldCandidates;
+}
+
+/** User-chosen column overrides for the fields exposed in the column-mapping UI.
+ *  An empty/missing entry means "use auto-detection for this field". */
+export interface JTLColumnOverrides {
+  eanBarcode?: string;
+  han?: string;
+  ekNettoLieferant?: string;
+  vkBrutto?: string;
 }
 
 export const JTL_FORMATS: JTLFormatDefinition[] = [
@@ -109,14 +118,17 @@ function allCandidates(field: keyof JTLFieldCandidates): string[] {
   return out;
 }
 
-/** Resolves one internal field's value for a row: tries the detected format's own header
- *  names first, then every other registered format's names as a fallback. The fallback means
- *  a single mis-detected or renamed column doesn't take down the whole file. */
+/** Resolves one internal field's value for a row. If the user picked a column for this
+ *  field manually (via the column-mapping UI), that column wins outright. Otherwise tries
+ *  the detected format's own header names first, then every other registered format's names
+ *  as a fallback — so a single mis-detected or renamed column doesn't take down the whole file. */
 export function resolveJTLField(
   row: Record<string, unknown>,
   field: keyof JTLFieldCandidates,
-  detected: JTLFormatDefinition
+  detected: JTLFormatDefinition,
+  overrideColumn?: string
 ): unknown {
+  if (overrideColumn) return resolveColumn(row, overrideColumn);
   const primary = detected.columns[field];
   const rest = allCandidates(field).filter(name => !primary.includes(name));
   return resolveColumn(row, ...primary, ...rest);
@@ -129,18 +141,63 @@ const CORE_FIELD_LABELS: Record<string, string> = {
   vkBrutto: 'VK',
 };
 
+/** Finds the actual header name (as it literally appears in the file) that matches one of the
+ *  given candidates, for prefilling the column-mapping UI with a suggestion. */
+function resolveHeaderName(headers: string[], candidates: string[]): string | undefined {
+  for (const candidate of candidates) {
+    const normCandidate = normalizeHeader(candidate);
+    const hit = headers.find(h => normalizeHeader(h) === normCandidate);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** Suggested column mapping for the EAN/HAN/EK/VK fields, used to prefill the column-mapping
+ *  dialog. Detects the format first so the detected format's own header names are preferred,
+ *  then falls back to every other registered format's names. */
+export function suggestJTLColumns(headers: string[]): {
+  formatId: string;
+  formatLabel: string;
+  eanBarcode?: string;
+  han?: string;
+  ekNettoLieferant?: string;
+  vkBrutto?: string;
+} {
+  const format = detectJTLFormat(headers);
+  const suggest = (field: keyof JTLFieldCandidates) => {
+    const primary = format.columns[field];
+    const rest = allCandidates(field).filter(name => !primary.includes(name));
+    return resolveHeaderName(headers, [...primary, ...rest]);
+  };
+  return {
+    formatId: format.id,
+    formatLabel: format.label,
+    eanBarcode: suggest('eanBarcode'),
+    han: suggest('han'),
+    ekNettoLieferant: suggest('ekNettoLieferant'),
+    vkBrutto: suggest('vkBrutto'),
+  };
+}
+
 /** Throws a descriptive error if the columns the app actually needs (EK, VK, and at least
- *  one of EAN/HAN to match rows by) can't be found under any registered format's header
- *  names. Checks across ALL formats, not just the detected one, so a file that mixes header
- *  conventions from different exports still passes as long as every field is found somewhere. */
-export function assertJTLColumnsPresent(headers: string[]): void {
+ *  one of EAN/HAN to match rows by) can't be found — either as a user-chosen override or under
+ *  any registered format's header names. Checks across ALL formats, not just the detected one,
+ *  so a file that mixes header conventions from different exports still passes as long as every
+ *  field is found somewhere. */
+export function assertJTLColumnsPresent(headers: string[], overrides: JTLColumnOverrides = {}): void {
   const missing: string[] = [];
   for (const field of ['ekNettoLieferant', 'vkBrutto'] as const) {
-    if (!headerListHasAny(headers, allCandidates(field))) missing.push(CORE_FIELD_LABELS[field]);
+    const override = overrides[field];
+    const ok = override ? headerListHasAny(headers, [override]) : headerListHasAny(headers, allCandidates(field));
+    if (!ok) missing.push(CORE_FIELD_LABELS[field]);
   }
-  const hasIdentifier =
-    headerListHasAny(headers, allCandidates('eanBarcode')) || headerListHasAny(headers, allCandidates('han'));
-  if (!hasIdentifier) missing.push('EAN oder HAN');
+  const hasEan = overrides.eanBarcode
+    ? headerListHasAny(headers, [overrides.eanBarcode])
+    : headerListHasAny(headers, allCandidates('eanBarcode'));
+  const hasHan = overrides.han
+    ? headerListHasAny(headers, [overrides.han])
+    : headerListHasAny(headers, allCandidates('han'));
+  if (!hasEan && !hasHan) missing.push('EAN oder HAN');
 
   if (missing.length > 0) {
     throw new Error(
